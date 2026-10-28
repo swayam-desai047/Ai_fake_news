@@ -14,7 +14,17 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
+# Handover paths (GET /api/articles, /api/article/{id}, /api/groups, /api/report/{id}, /api/analytics).
+app.include_router(api_router, prefix="/api")
 
 @app.get("/")
 def read_root():
     return {"status": "ok", "message": "AI News Aggregator API is running"}
+
+@app.on_event("startup")
+def on_startup():
+    try:
+        from services.scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        print(f"Scheduler startup skipped: {e}")

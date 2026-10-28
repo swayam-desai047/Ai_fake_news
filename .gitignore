@@ -1,6 +1,13 @@
 docs
 refernces
 .env
+.env*
+*.env*
 __pycache__
 venv
+.venv
+.claude
+.agents
 frontend/node_modules
+frontend/.next
+frontend/tsconfig.tsbuildinfo

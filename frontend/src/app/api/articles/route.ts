@@ -1,35 +1,18 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { queryArticles } from '@/lib/repository';
+import { parseArticleQuery } from '@/lib/query';
 
+/**
+ * GET /api/articles — paginated, filterable article list (handover §6 step 5).
+ * Query: q, section (or legacy `category`), publisher, risk, verify=1, sort=newest|oldest, page, limit.
+ */
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
-
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const query = searchParams.get('q') || '';
-    const category = searchParams.get('category') || '';
-
-    const offset = (page - 1) * limit;
-
-    let supabaseQuery = supabase
-        .from('articles')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-    if (query) {
-        supabaseQuery = supabaseQuery.or(`title.ilike.%${query}%,content_summary.ilike.%${query}%`);
+    try {
+        const result = await queryArticles(parseArticleQuery(searchParams));
+        return NextResponse.json(result);
+    } catch (err) {
+        console.error('GET /api/articles failed:', err);
+        return NextResponse.json({ error: 'Articles are temporarily unavailable.' }, { status: 503 });
     }
-
-    if (category && category.toLowerCase() !== 'all') {
-        supabaseQuery = supabaseQuery.eq('category', category.toLowerCase());
-    }
-
-    const { data, error } = await supabaseQuery;
-
-    if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ articles: data });
 }

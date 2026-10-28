@@ -1,87 +1,88 @@
-"use client";
+import Link from 'next/link';
+import { SECTIONS } from '@/lib/sections';
+import type { ArticleQuery } from '@/lib/types';
 
-import React, { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+interface SearchAndFilterProps {
+    query: ArticleQuery;
+    publishers: string[];
+}
 
-const CATEGORIES = ["All", "General", "Politics", "Business", "Technology", "Sports"];
-
-export default function SearchAndFilter() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-
-    const initialQuery = searchParams.get('q') || '';
-    const initialCategory = searchParams.get('category') || 'All';
-
-    const [searchQuery, setSearchQuery] = useState(initialQuery);
-    const [activeCategory, setActiveCategory] = useState(initialCategory);
-
-    useEffect(() => {
-        setSearchQuery(searchParams.get('q') || '');
-        setActiveCategory(searchParams.get('category') || 'All');
-    }, [searchParams]);
-
-    const handleSearchSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        updateUrlParams(searchQuery, activeCategory);
-    };
-
-    const handleCategoryClick = (category: string) => {
-        setActiveCategory(category);
-        updateUrlParams(searchQuery, category);
-    };
-
-    const updateUrlParams = (q: string, category: string) => {
-        const params = new URLSearchParams();
-        if (q.trim()) params.set('q', q.trim());
-        if (category && category !== 'All') params.set('category', category.toLowerCase());
-        router.push(`/?${params.toString()}`);
-    };
-
+/**
+ * Search form for the edition. A plain GET form, so it works with or without JavaScript and every
+ * result page is a shareable URL.
+ */
+export default function SearchAndFilter({ query, publishers }: SearchAndFilterProps) {
+    const active = Boolean(query.q || query.section || query.publisher || query.risk || query.needsVerification || query.sort || query.since);
     return (
-        <div className="search-glass p-4 sm:p-5">
-            <div className="flex flex-col md:flex-row gap-4 items-center">
-
-                {/* Category Pills */}
-                <div className="flex overflow-x-auto w-full md:w-auto gap-2 pb-1 md:pb-0 hide-scrollbar">
-                    {CATEGORIES.map((cat) => (
-                        <button
-                            key={cat}
-                            onClick={() => handleCategoryClick(cat)}
-                            className={`category-pill ${activeCategory.toLowerCase() === cat.toLowerCase()
-                                    ? 'category-pill-active'
-                                    : 'category-pill-inactive'
-                                }`}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Search */}
-                <form onSubmit={handleSearchSubmit} className="w-full md:w-80 relative flex-shrink-0">
-                    <input
-                        type="text"
-                        placeholder="Search news..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="search-input"
-                    />
-                    <button
-                        type="submit"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                        style={{ color: 'var(--text-muted)' }}
-                        onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent-cyan)')}
-                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                            strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                            <path strokeLinecap="round" strokeLinejoin="round"
-                                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                        </svg>
-                    </button>
-                </form>
-
+        <form action="/search" method="get" role="search" className="border-b border-[var(--ink)] pb-6">
+            <label htmlFor="q" className="field-label">Search headlines and text</label>
+            <div className="flex items-end gap-4">
+                <input
+                    id="q"
+                    name="q"
+                    type="search"
+                    defaultValue={query.q}
+                    placeholder="Search the edition…"
+                    className="field field--search flex-1 min-w-0"
+                    autoComplete="off"
+                    enterKeyHint="search"
+                />
+                <button type="submit" className="btn shrink-0">Search</button>
             </div>
-        </div>
+
+            <fieldset className="mt-6 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-[repeat(5,minmax(0,1fr))_auto]">
+                <legend className="sr-only">Filters</legend>
+                <div>
+                    <label htmlFor="section" className="field-label">Section</label>
+                    <select id="section" name="section" defaultValue={query.section || ''} className="field">
+                        <option value="">All sections</option>
+                        {SECTIONS.map(s => <option key={s.slug} value={s.slug}>{s.label}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="publisher" className="field-label">Publisher</label>
+                    <select id="publisher" name="publisher" defaultValue={query.publisher || ''} className="field">
+                        <option value="">All publishers</option>
+                        {publishers.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="risk" className="field-label">Credibility risk</label>
+                    <select id="risk" name="risk" defaultValue={query.risk || ''} className="field">
+                        <option value="">Any risk level</option>
+                        <option value="Low Risk">Low risk</option>
+                        <option value="Moderate Risk">Moderate risk</option>
+                        <option value="High Risk">High risk</option>
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="sort" className="field-label">Order</label>
+                    <select id="sort" name="sort" defaultValue={query.sort || ''} className="field">
+                        <option value="">Best match</option>
+                        <option value="newest">Newest first</option>
+                        <option value="oldest">Oldest first</option>
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="since" className="field-label">Published</label>
+                    <select id="since" name="since" defaultValue={query.since || ''} className="field">
+                        <option value="">Any time</option>
+                        <option value="24h">Last 24 hours</option>
+                        <option value="7d">Last 7 days</option>
+                        <option value="30d">Last 30 days</option>
+                    </select>
+                </div>
+                <div className="flex items-end gap-5 pb-1.5">
+                    <label className="checkbox whitespace-nowrap">
+                        <input type="checkbox" name="verify" value="1" defaultChecked={query.needsVerification} />
+                        Needs verification only
+                    </label>
+                </div>
+            </fieldset>
+            <div className="mt-5 flex items-center gap-5">
+                <button type="submit" className="btn btn--ghost">Apply filters</button>
+                {active && <Link href="/search" className="text-link">Clear filters</Link>}
+            </div>
+        </form>
     );
 }

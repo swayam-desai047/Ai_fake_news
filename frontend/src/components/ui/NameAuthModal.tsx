@@ -1,20 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 interface NameAuthModalProps {
     onAuthenticated: (name: string) => void;
 }
 
+/** The reader register: the existing name-only sign-in, set as a printed subscription card. */
 export default function NameAuthModal({ onAuthenticated }: NameAuthModalProps) {
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -42,8 +38,11 @@ export default function NameAuthModal({ onAuthenticated }: NameAuthModalProps) {
                 return;
             }
 
-            // Store in localStorage
-            localStorage.setItem('ai_news_user', trimmedName);
+            try {
+                localStorage.setItem('ai_news_user', trimmedName);
+            } catch {
+                /* storage unavailable: the session still continues */
+            }
             onAuthenticated(trimmedName);
         } catch {
             setError('Network error. Please try again.');
@@ -51,84 +50,46 @@ export default function NameAuthModal({ onAuthenticated }: NameAuthModalProps) {
         }
     };
 
-    if (!mounted) return null;
-
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center auth-overlay">
-            {/* Animated grid background */}
-            <div className="absolute inset-0 auth-grid-bg" />
-
-            {/* Floating orbs */}
-            <div className="absolute top-1/4 left-1/4 w-72 h-72 rounded-full orb-blue" />
-            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full orb-violet" />
-
-            {/* Modal Card */}
-            <div className="relative z-10 w-full max-w-md mx-4 auth-card">
-                {/* AI Icon */}
-                <div className="flex justify-center mb-6">
-                    <div className="ai-icon-ring">
-                        <svg className="w-8 h-8 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4" />
-                        </svg>
-                    </div>
-                </div>
-
-                {/* Heading */}
-                <h1 className="text-2xl font-extrabold text-center text-white mb-1 tracking-tight">
-                    AI News Aggregator
+        <div className="register-backdrop" role="dialog" aria-modal="true" aria-labelledby="register-title">
+            <div className="register-card">
+                <p className="kicker">Reader&rsquo;s register</p>
+                <h1 id="register-title" className="font-[family-name:var(--font-display)] font-black text-[2.1rem] leading-none mt-3">
+                    The Daily Signal
                 </h1>
-                <p className="text-center text-cyan-300/70 text-sm mb-8">
-                    Enter your name to access the intelligence feed
+                <p className="masthead__tagline !mt-2">News, context and credibility.</p>
+                <hr className="rule-double my-5" />
+                <p className="dek-sm mb-5">
+                    Sign the register with your name to open today&rsquo;s edition. No password is required.
                 </p>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="relative">
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => { setName(e.target.value); setError(''); }}
-                            placeholder="Your name..."
-                            autoFocus
-                            maxLength={60}
-                            className="auth-input"
-                            disabled={loading}
-                        />
-                        {/* Decorative scan line on focus */}
-                        <div className="auth-input-line" />
-                    </div>
+                <form onSubmit={handleSubmit} className="text-left">
+                    <label htmlFor="reader-name" className="field-label">Your name</label>
+                    <input
+                        id="reader-name"
+                        type="text"
+                        value={name}
+                        onChange={(e) => { setName(e.target.value); setError(''); }}
+                        placeholder="e.g. A. Reader"
+                        autoFocus
+                        autoComplete="name"
+                        maxLength={60}
+                        className="field"
+                        disabled={loading}
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={error ? 'reader-error' : undefined}
+                    />
 
                     {error && (
-                        <p className="text-red-400 text-xs text-center animate-pulse">
+                        <p id="reader-error" role="alert" className="annotation !text-[var(--red)] mt-2">
                             {error}
                         </p>
                     )}
 
-                    <button
-                        type="submit"
-                        disabled={loading || !name.trim()}
-                        className="auth-btn"
-                    >
-                        {loading ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                Authenticating...
-                            </span>
-                        ) : (
-                            <span className="flex items-center justify-center gap-2">
-                                Enter
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                                </svg>
-                            </span>
-                        )}
+                    <button type="submit" disabled={loading || !name.trim()} className="btn w-full mt-6">
+                        {loading ? 'Opening the edition…' : 'Open today’s edition'}
                     </button>
                 </form>
-
-                <p className="text-center text-white/20 text-xs mt-6">
-                    No password required · Verified by AI
-                </p>
             </div>
         </div>
     );
