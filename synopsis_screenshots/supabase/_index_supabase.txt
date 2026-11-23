@@ -1,0 +1,19 @@
+01_project_overview.png | Supabase project overview: status, region, compute, request stats
+02_table_editor_articles.png | Table editor: rows in "articles" table
+03_table_definition_articles.png | SQL definition of "articles" table
+04_table_editor_named_visitors.png | Table editor: rows in "named_visitors" table
+05_table_definition_named_visitors.png | SQL definition of "named_visitors" table
+06_table_editor_user_profiles.png | Table editor: rows in "user_profiles" table
+07_table_definition_user_profiles.png | SQL definition of "user_profiles" table
+08_schema_visualizer.png | Schema visualizer: public tables and columns
+09_database_tables.png | Database tables list with row counts and sizes
+10_database_indexes.png | Indexes on public tables
+11_database_functions.png | Database functions
+12_rls_policies.png | Row Level Security policies
+13_sql_editor_category_stats.png | SQL editor: articles per category, fake flags, average credibility
+14_sql_editor_sentiment_stats.png | SQL editor: sentiment distribution
+15_auth_users.png | Authentication: users
+16_api_docs_intro.png | Auto-generated REST API docs (PostgREST)
+17_reports_database.png | Database usage report
+18_reports_api.png | API requests report
+19_logs_explorer.png | Logs explorer
