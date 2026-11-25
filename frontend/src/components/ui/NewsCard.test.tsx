@@ -55,4 +55,11 @@ describe('NewsCard', () => {
         expect(screen.getByText('Needs verification')).toBeInTheDocument()
         expect(screen.getByText(/Confidence 55%/)).toBeInTheDocument()
     })
+
+    it('shows "not assessed" when no risk score exists, never a default label', () => {
+        render(<NewsCard article={{ ...base, credibility: { label: 'Unavailable', score: null, confidence: null, needsVerification: true, reasoning: null } }} />)
+
+        expect(screen.getByText(/not assessed/i)).toBeInTheDocument()
+        expect(screen.queryByText('Low Risk')).not.toBeInTheDocument()
+    })
 })

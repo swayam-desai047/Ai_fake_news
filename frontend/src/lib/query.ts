@@ -1,7 +1,7 @@
 import { getSection } from './sections';
-import type { ArticleQuery, RiskLabel } from './types';
+import type { ArticleQuery, CredibilityLabel } from './types';
 
-const RISKS: RiskLabel[] = ['Low Risk', 'Moderate Risk', 'High Risk'];
+const RISKS: CredibilityLabel[] = ['Low Risk', 'Moderate Risk', 'High Risk', 'Unavailable'];
 
 type Params = URLSearchParams | Record<string, string | string[] | undefined>;
 
@@ -23,7 +23,7 @@ export function parseArticleQuery(params: Params): ArticleQuery {
         q: read(params, 'q').trim().slice(0, 120),
         section: getSection(sectionRaw)?.slug ?? '',
         publisher: read(params, 'publisher'),
-        risk: RISKS.includes(risk as RiskLabel) ? (risk as RiskLabel) : '',
+        risk: RISKS.includes(risk as CredibilityLabel) ? (risk as CredibilityLabel) : '',
         needsVerification: read(params, 'verify') === '1',
         sort: sort === 'oldest' || sort === 'newest' || sort === 'relevance' ? sort : undefined,
         since: since === '24h' || since === '7d' || since === '30d' ? since : undefined,

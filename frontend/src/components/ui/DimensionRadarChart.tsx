@@ -14,7 +14,7 @@ interface DimensionRadarChartProps {
 interface Row {
     axis: string;
     label: string;
-    score: number;
+    score: number | null;
     comparison?: number;
     low: string;
     high: string;
@@ -25,7 +25,7 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: { paylo
     const row = payload[0].payload;
     return (
         <div className="chart-tooltip">
-            <strong>{row.label}</strong>: {row.score}/100
+            <strong>{row.label}</strong>: {row.score === null ? 'not scored' : `${row.score}/100`}
             {typeof row.comparison === 'number' && <div>Edition average: {row.comparison}</div>}
             <div className="text-[var(--ink-2)]">0 = {row.low} · 100 = {row.high}</div>
         </div>
@@ -35,7 +35,7 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: { paylo
 /** Eight-dimension profile in ink, with thin gridlines. Paired with the score table for exact values. */
 export default function DimensionRadarChart({ dimensions, comparison, comparisonLabel = 'Edition average' }: DimensionRadarChartProps) {
     const data: Row[] = DIMENSIONS.map(d => ({
-        axis: d.short,
+        axis: dimensions[d.key] === null ? `${d.short} (n/a)` : d.short,
         label: d.label,
         score: dimensions[d.key],
         comparison: comparison?.[d.key] as number | undefined,
@@ -45,7 +45,7 @@ export default function DimensionRadarChart({ dimensions, comparison, comparison
 
     return (
         <figure className="chart-block m-0">
-            <div className="h-[320px] sm:h-[360px]" role="img" aria-label={`Radar chart of eight dimension scores: ${data.map(d => `${d.label} ${d.score}`).join(', ')}.`}>
+            <div className="h-[320px] sm:h-[360px]" role="img" aria-label={`Radar chart of eight dimension scores: ${data.map(d => `${d.label} ${d.score ?? 'not scored'}`).join(', ')}.`}>
                 <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={data} outerRadius="72%" margin={{ top: 8, right: 24, bottom: 8, left: 24 }}>
                         <PolarGrid stroke="#D8D6D0" strokeWidth={1} />
@@ -73,6 +73,7 @@ export default function DimensionRadarChart({ dimensions, comparison, comparison
                             fill="#171717"
                             fillOpacity={0.08}
                             dot={{ r: 3, fill: '#171717', strokeWidth: 0 }}
+                            connectNulls
                             animationDuration={900}
                         />
                         <Tooltip content={<ChartTooltip />} cursor={false} />

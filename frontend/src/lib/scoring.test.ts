@@ -14,7 +14,7 @@ describe('analyseText', () => {
     it('keeps every dimension within 0–100 and explains each one', () => {
         const r = analyseText('SHOCKING!!! You won’t believe this secret', 'Exposed.', 'Unknown Blog');
         for (const [k, v] of Object.entries(r.dimensions)) {
-            if (k === 'explanations') continue;
+            if (k === 'explanations' || v === null) continue;
             expect(v).toBeGreaterThanOrEqual(0);
             expect(v).toBeLessThanOrEqual(100);
         }
@@ -24,6 +24,22 @@ describe('analyseText', () => {
 
     it('flags short excerpts as needing verification (handover: under 150 characters)', () => {
         expect(analyseText('Headline', 'Too short to judge.', 'BBC News').credibility.needsVerification).toBe(true);
+    });
+
+    it('never gives a headline-only article from an unknown publisher a risk label', () => {
+        const r = analyseText('Markets fall sharply', '', 'Unknown Blog');
+        expect(r.credibility.label).toBe('Unavailable');
+        expect(r.credibility.score).toBeNull();
+        expect(r.credibility.needsVerification).toBe(true);
+        expect(r.dimensions.headline_accuracy).toBeNull();
+        expect(r.dimensions.source_credibility).toBeNull();
+        expect(r.dimensions.explanations.headline_accuracy).toMatch(/^Not scored/);
+    });
+
+    it('does not assign a source score to publishers outside the reference table', () => {
+        const r = analyseText('Council approves park', 'The city council voted to approve a new park, a spokesperson said on Monday evening after a long meeting with residents.', 'Local Gazette');
+        expect(r.dimensions.source_credibility).toBeNull();
+        expect(r.credibility.score).not.toBeNull();
     });
 
     it('maps risk scores onto the handover thresholds', () => {

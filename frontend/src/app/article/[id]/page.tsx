@@ -36,7 +36,10 @@ export default async function ArticlePage({ params }: Props) {
 
     const scored = edition.articles.filter(a => a.dimensions && a.analysisMethod === article.analysisMethod);
     const average = scored.length > 5
-        ? Object.fromEntries(DIMENSION_KEYS.map(k => [k, Math.round(scored.reduce((s, a) => s + a.dimensions![k], 0) / scored.length)])) as Record<DimensionKey, number>
+        ? Object.fromEntries(DIMENSION_KEYS.map(k => {
+            const vals = scored.map(a => a.dimensions![k]).filter((v): v is number => typeof v === 'number');
+            return [k, vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : undefined];
+        })) as Partial<Record<DimensionKey, number>>
         : null;
 
     const standfirst = article.summaryKind === 'ai' ? article.summary : null;
@@ -121,11 +124,15 @@ export default async function ArticlePage({ params }: Props) {
                         <dl className="mt-3 divide-y divide-[var(--rule)]">
                             <div className="flex justify-between gap-4 py-2"><dt className="annotation">Risk label</dt><dd><RiskMark credibility={{ ...c, needsVerification: false }} /></dd></div>
                             <div className="flex justify-between gap-4 py-2"><dt className="annotation">Risk score</dt><dd className="font-semibold">{c.score !== null ? c.score.toFixed(2) : '—'}</dd></div>
-                            <div className="flex justify-between gap-4 py-2"><dt className="annotation">Model confidence</dt><dd className="font-semibold">{c.confidence !== null ? pct(c.confidence) : 'Not reported'}</dd></div>
+                            <div className="flex justify-between gap-4 py-2"><dt className="annotation">Classifier fake score</dt><dd className="font-semibold">{typeof c.modelFakeProbability === 'number' ? c.modelFakeProbability.toFixed(2) : 'Not available'}</dd></div>
+                            <div className="flex justify-between gap-4 py-2"><dt className="annotation">Classifier confidence</dt><dd className="font-semibold">{c.confidence !== null ? pct(c.confidence) : 'Not reported'}</dd></div>
                             <div className="flex justify-between gap-4 py-2"><dt className="annotation">Verification</dt><dd className={`font-semibold ${c.needsVerification ? 'text-[var(--risk-verify)]' : ''}`}>{c.needsVerification ? 'Needs verification' : 'Not flagged'}</dd></div>
                         </dl>
                         {c.reasoning && <p className="dek-sm mt-3 italic">{c.reasoning}</p>}
-                        <p className="annotation mt-3">Risk score runs 0–1 and is not a calibrated probability. {DISCLAIMER}</p>
+                        <p className="annotation mt-3">
+                            Risk score runs 0–1 and is not a calibrated probability; classifier scores are raw model outputs.
+                            {c.status ? ` Analysis status: ${c.status}.` : ''}{c.modelVersion ? ` (${c.modelVersion})` : ''} {DISCLAIMER}
+                        </p>
                         <div className="mt-4 no-print">
                             <ReportDownload article={article} backendUrl={process.env.NEXT_PUBLIC_API_URL ?? null} />
                             <Link href="#analysis" className="text-link mt-4 inline-block">Read the analysis supplement</Link>

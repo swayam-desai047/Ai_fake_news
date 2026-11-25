@@ -18,7 +18,7 @@ export const DIMENSIONS: DimensionMeta[] = [
     { key: 'readability', label: 'Readability', short: 'Readability', low: 'dense', high: 'plain' },
     { key: 'propaganda', label: 'Propaganda / Manipulation', short: 'Manipulation', low: 'many markers', high: 'none detected' },
     { key: 'headline_accuracy', label: 'Headline Accuracy', short: 'Headline', low: 'unsupported', high: 'supported by text' },
-    { key: 'source_credibility', label: 'Source Credibility', short: 'Source', low: 'unrated / weak', high: 'established' },
+    { key: 'source_credibility', label: 'Source Credibility', short: 'Source', low: 'weak', high: 'established' },
     { key: 'content_quality', label: 'Content Quality', short: 'Quality', low: 'thin', high: 'complete' },
 ];
 
@@ -30,7 +30,7 @@ export const METHOD_NOTE = {
     heuristic:
         'Scored by transparent lexical rules applied to the headline and the publisher’s feed excerpt: word lists for tone, subjectivity, loaded language and sensationalism; Flesch Reading Ease; headline-to-excerpt term overlap; and a hand-curated publisher reference table. No confidence value is reported because these rules are not a calibrated model.',
     model:
-        'Scored by the backend pipeline: the BERT-tiny credibility classifier and the eight-dimension analyser, stored with the article at ingestion time.',
+        'Scored by the backend pipeline at ingestion time. The eight dimensions use the same transparent rules as live-feed articles; when the models are available, Sentiment comes from DistilBERT SST-2 and the risk score is the mean of the rule-based risk and the BERT-tiny classifier’s fake-class score. Model scores are raw outputs, not calibrated probabilities. Dimensions that cannot be measured from the available text are marked n/a.',
 } as const;
 
 export const DISCLAIMER =

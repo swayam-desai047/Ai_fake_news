@@ -1,6 +1,7 @@
 -- ============================================================
--- AI News Aggregator — Complete Unified Database Schema
--- Paste and run this once in Supabase SQL Editor:
+-- AI News Aggregator — Complete Unified Database Schema (v2)
+-- Fresh install: paste and run this once in the Supabase SQL Editor. It is idempotent, so it can
+-- also be re-run on an existing database (it then behaves like migrations 01 + 02).
 -- https://supabase.com/dashboard/project/_/sql
 -- ============================================================
 
@@ -25,26 +26,41 @@ CREATE TABLE IF NOT EXISTS articles (
   created_at          timestamp with time zone DEFAULT now(),
 
   -- M.Sc Synopsis & 8-Dimension Analysis Fields
-  risk_score          real,
-  confidence_level    real,
-  credibility_label   text DEFAULT 'Low Risk',
+  risk_score          real,                 -- 0..1 heuristic risk (not a calibrated probability)
+  confidence_level    real,                 -- classifier's top-class softmax score (uncalibrated)
+  credibility_label   text,                 -- Low/Moderate/High Risk; NULL = not computed
   needs_verification  boolean DEFAULT false,
   ai_summary          text,
   dimensions          jsonb DEFAULT '{}'::jsonb,
   group_id            text DEFAULT NULL,
-  event_title         text DEFAULT NULL
+  event_title         text DEFAULT NULL,
+
+  -- v2 analysis provenance
+  analysis_status        text,              -- complete | partial | unavailable | pending | legacy
+  analysis_method        text,              -- model+rules | rules
+  model_version          text,
+  analyzed_at            timestamptz,
+  summary_method         text,              -- extractive
+  model_fake_probability real               -- raw classifier fake-class score
 );
 
 -- Ensure upgrade columns exist if the table was previously created
 ALTER TABLE articles
   ADD COLUMN IF NOT EXISTS risk_score REAL,
   ADD COLUMN IF NOT EXISTS confidence_level REAL,
-  ADD COLUMN IF NOT EXISTS credibility_label TEXT DEFAULT 'Low Risk',
+  ADD COLUMN IF NOT EXISTS credibility_label TEXT,
   ADD COLUMN IF NOT EXISTS needs_verification BOOLEAN DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS ai_summary TEXT,
   ADD COLUMN IF NOT EXISTS dimensions JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS group_id TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS event_title TEXT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS event_title TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS analysis_status TEXT,
+  ADD COLUMN IF NOT EXISTS analysis_method TEXT,
+  ADD COLUMN IF NOT EXISTS model_version TEXT,
+  ADD COLUMN IF NOT EXISTS analyzed_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS summary_method TEXT,
+  ADD COLUMN IF NOT EXISTS model_fake_probability REAL;
+ALTER TABLE articles ALTER COLUMN credibility_label DROP DEFAULT;
 
 -- ────────────────────────────────────────────────────────────
 -- 2. NAMED VISITORS TABLE (Display name / visitor login)
@@ -72,17 +88,14 @@ ALTER TABLE articles       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE named_visitors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_profiles  ENABLE ROW LEVEL SECURITY;
 
--- Articles: public read, insert, update
+-- Articles: public READ only. The FastAPI backend writes with the service-role key (bypasses RLS);
+-- the anon/publishable key used by the frontend cannot insert, update or delete articles.
 DROP POLICY IF EXISTS "Articles: public read" ON articles;
 CREATE POLICY "Articles: public read" ON articles FOR SELECT USING (true);
-
 DROP POLICY IF EXISTS "Articles: public insert" ON articles;
-CREATE POLICY "Articles: public insert" ON articles FOR INSERT WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Articles: public update" ON articles;
-CREATE POLICY "Articles: public update" ON articles FOR UPDATE USING (true);
 
--- Named Visitors: public read, insert
+-- Named Visitors: public read, insert (name-only reader registration). No update/delete policy.
 DROP POLICY IF EXISTS "Allow public read" ON named_visitors;
 CREATE POLICY "Allow public read" ON named_visitors FOR SELECT USING (true);
 
@@ -108,3 +121,28 @@ CREATE INDEX IF NOT EXISTS idx_articles_credibility       ON articles (credibili
 CREATE INDEX IF NOT EXISTS idx_articles_group_id          ON articles (group_id);
 CREATE INDEX IF NOT EXISTS idx_articles_credibility_label ON articles (credibility_label);
 CREATE INDEX IF NOT EXISTS idx_articles_needs_verification ON articles (needs_verification);
+CREATE INDEX IF NOT EXISTS idx_articles_source_url        ON articles (source_url);
+CREATE INDEX IF NOT EXISTS idx_articles_analysis_status   ON articles (analysis_status);
+
+-- ────────────────────────────────────────────────────────────
+-- 6. VALUE CONSTRAINTS (NOT VALID = existing rows are not re-checked)
+-- ────────────────────────────────────────────────────────────
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'articles_credibility_label_check') THEN
+    ALTER TABLE articles ADD CONSTRAINT articles_credibility_label_check
+      CHECK (credibility_label IS NULL OR credibility_label IN ('Low Risk', 'Moderate Risk', 'High Risk')) NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'articles_risk_score_range') THEN
+    ALTER TABLE articles ADD CONSTRAINT articles_risk_score_range
+      CHECK (risk_score IS NULL OR (risk_score >= 0 AND risk_score <= 1)) NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'articles_analysis_status_check') THEN
+    ALTER TABLE articles ADD CONSTRAINT articles_analysis_status_check
+      CHECK (analysis_status IS NULL OR analysis_status IN ('complete', 'partial', 'unavailable', 'pending', 'legacy')) NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'named_visitors_name_length') THEN
+    ALTER TABLE named_visitors ADD CONSTRAINT named_visitors_name_length
+      CHECK (char_length(btrim(name)) BETWEEN 1 AND 40) NOT VALID;
+  END IF;
+END $$;

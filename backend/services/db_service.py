@@ -1,122 +1,176 @@
-from typing import List, Dict, Optional, Any
-from db.supabase import get_supabase_client
-from services.ai_service import analyze_article_text
+"""
+Supabase persistence for articles: duplicate checks, analysed inserts, cross-source group updates
+and read helpers used by the API.
+
+Writes need the service-role key (``SUPABASE_SERVICE_ROLE_KEY``); with migration
+``02_integrity_and_security.sql`` applied, the public (anon/publishable) key can only read.
+"""
+from __future__ import annotations
+
 import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
+
+from db.supabase import get_supabase_client
+from services.analysis_pipeline import analyze_article
+from services.clustering_service import WINDOW_HOURS, assignments
+from services.rss_fetcher import normalise_title, normalise_url
 
 logger = logging.getLogger(__name__)
 
+# Columns written by the pipeline. Columns added by migration 02 are listed separately so the
+# service still works (with a warning) against a database where it has not been applied yet.
+BASE_COLUMNS = [
+    "title", "source_domain", "source_url", "content_summary", "category", "published_at",
+    "sentiment", "is_fake", "credibility_score", "ai_reasoning", "risk_score", "confidence_level",
+    "credibility_label", "needs_verification", "ai_summary", "dimensions", "group_id", "event_title",
+]
+V2_COLUMNS = ["analysis_status", "analysis_method", "model_version", "analyzed_at", "summary_method",
+              "model_fake_probability"]
+
+
 def get_article_by_id(article_id: str) -> Optional[Dict[str, Any]]:
-    """Fetches a single article by UUID from Supabase."""
+    """Fetch one article by UUID; None when absent. Raises on database errors."""
     client = get_supabase_client()
-    try:
-        response = client.table("articles").select("*").eq("id", article_id).limit(1).execute()
-        if response.data and len(response.data) > 0:
-            return response.data[0]
-        return None
-    except Exception as e:
-        logger.error(f"Error fetching article by id '{article_id}': {e}")
-        return None
+    response = client.table("articles").select("*").eq("id", article_id).limit(1).execute()
+    return response.data[0] if response.data else None
 
-def get_grouped_articles() -> List[Dict[str, Any]]:
-    """
-    Fetches articles grouped by their group_id for cross-source comparison.
-    Returns a list of cluster dictionaries containing group_id, event_title, and associated articles.
-    """
+
+def get_grouped_articles(limit: int = 300) -> List[Dict[str, Any]]:
+    """Articles sharing a group_id, assembled into groups with publisher-wise coverage."""
     client = get_supabase_client()
+    response = (client.table("articles").select("*").not_.is_("group_id", "null")
+                .order("published_at", desc=True).limit(limit).execute())
+    groups: Dict[str, Dict[str, Any]] = {}
+    for article in response.data or []:
+        gid = article.get("group_id")
+        g = groups.setdefault(gid, {"group_id": gid, "event_title": article.get("event_title") or article.get("title"),
+                                    "articles": [], "publishers": []})
+        g["articles"].append(article)
+        pub = article.get("source_domain") or "Unknown publisher"
+        if pub not in g["publishers"]:
+            g["publishers"].append(pub)
+    result = []
+    for g in groups.values():
+        g["publisher_count"] = len(g["publishers"])
+        g["coverage"] = [
+            {"publisher": p, "articles": [
+                {"id": a["id"], "title": a["title"], "published_at": a.get("published_at"),
+                 "credibility_label": a.get("credibility_label"), "sentiment": a.get("sentiment")}
+                for a in g["articles"] if (a.get("source_domain") or "Unknown publisher") == p]}
+            for p in g["publishers"]
+        ]
+        result.append(g)
+    return sorted(result, key=lambda g: -g["publisher_count"])
+
+
+def existing_keys(client, articles: List[Dict]) -> Tuple[Set[str], Set[str]]:
+    """Normalised titles and URLs of the batch that are already stored."""
+    titles = list({a["title"] for a in articles})
+    # Raw and normalised forms, so a stored URL also matches an incoming copy with tracking parameters.
+    urls = list({u for a in articles if a.get("source_url") for u in (a["source_url"], normalise_url(a["source_url"]))})
+    seen_titles: Set[str] = set()
+    seen_urls: Set[str] = set()
+    for i in range(0, len(titles), 50):
+        rows = client.table("articles").select("title").in_("title", titles[i:i + 50]).execute().data or []
+        seen_titles.update(normalise_title(r["title"]) for r in rows)
+    for i in range(0, len(urls), 50):
+        rows = client.table("articles").select("source_url").in_("source_url", urls[i:i + 50]).execute().data or []
+        seen_urls.update(normalise_url(r["source_url"]) for r in rows if r.get("source_url"))
+    return seen_titles, seen_urls
+
+
+def build_record(article: Dict[str, Any], analysis: Dict[str, Any], include_v2: bool = True) -> Dict[str, Any]:
+    """Merge a collected article with its analysis into a row; never fills in missing analysis."""
+    merged = {**article, **{k: v for k, v in analysis.items() if not k.startswith("_")}}
+    columns = BASE_COLUMNS + (V2_COLUMNS if include_v2 else [])
+    record = {c: merged.get(c) for c in columns if c in merged}
+    record.setdefault("category", "general")
+    if not record.get("published_at"):
+        record.pop("published_at", None)  # let the column default (ingestion time) apply
+    return record
+
+
+def _insert(client, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Insert, ignoring a title already present (UNIQUE constraint); falls back to pre-v2 columns."""
     try:
-        response = client.table("articles").select("*").not_.is_("group_id", "null").order("published_at", desc=True).limit(200).execute()
-        articles = response.data or []
-        
-        groups_dict: Dict[str, Dict[str, Any]] = {}
-        for article in articles:
-            gid = article.get("group_id")
-            if not gid:
-                continue
-            if gid not in groups_dict:
-                groups_dict[gid] = {
-                    "group_id": gid,
-                    "event_title": article.get("event_title") or article.get("title"),
-                    "articles": [],
-                    "publishers": set()
-                }
-            groups_dict[gid]["articles"].append(article)
-            domain = article.get("source_domain")
-            if domain:
-                groups_dict[gid]["publishers"].add(domain)
+        res = client.table("articles").upsert(record, on_conflict="title", ignore_duplicates=True).execute()
+    except Exception as exc:
+        missing_v2 = any(c in str(exc) for c in V2_COLUMNS)
+        if not missing_v2:
+            raise
+        logger.warning("Migration 02 not applied; storing without analysis_status/model_version columns.")
+        legacy = {k: v for k, v in record.items() if k not in V2_COLUMNS}
+        res = client.table("articles").upsert(legacy, on_conflict="title", ignore_duplicates=True).execute()
+    return res.data[0] if res.data else None
 
-        result = []
-        for gid, grp in groups_dict.items():
-            grp["publishers"] = list(grp["publishers"])
-            grp["publisher_count"] = len(grp["publishers"])
-            result.append(grp)
 
-        return result
-    except Exception as e:
-        logger.error(f"Error fetching grouped articles: {e}")
-        return []
+def store_articles_in_db(articles: List[Dict], analyse: Callable[..., Dict[str, Any]] = analyze_article,
+                         client=None) -> Dict[str, int]:
+    """Analyse and store new articles. Already-stored articles are skipped before analysis.
 
-def save_article_with_dimensions(article_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    Returns counts: received, duplicates, inserted, failed, needs_verification, unavailable.
     """
-    Saves an article with full 8-dimension scores, AI summary, calibrated risk, and clustering metadata.
-    Handles duplicate checking by title.
-    """
-    client = get_supabase_client()
-    title = article_data.get("title")
-    if not title:
-        logger.warning("Attempted to save article without title")
-        return None
-
-    try:
-        check = client.table("articles").select("id").eq("title", title).limit(1).execute()
-        if check.data and len(check.data) > 0:
-            logger.info(f"Article already exists, skipping: {title}")
-            return check.data[0]
-
-        record = {
-            "title": title,
-            "source_domain": article_data.get("source_domain", ""),
-            "source_url": article_data.get("source_url", ""),
-            "content_summary": article_data.get("content_summary", ""),
-            "category": article_data.get("category", "general"),
-            "sentiment": article_data.get("sentiment", "neutral"),
-            "is_fake": article_data.get("is_fake", False),
-            "credibility_score": article_data.get("credibility_score", 0.5),
-            "ai_reasoning": article_data.get("ai_reasoning", ""),
-            "risk_score": article_data.get("risk_score"),
-            "confidence_level": article_data.get("confidence_level"),
-            "credibility_label": article_data.get("credibility_label", "Low Risk"),
-            "needs_verification": article_data.get("needs_verification", False),
-            "ai_summary": article_data.get("ai_summary", ""),
-            "dimensions": article_data.get("dimensions", {}),
-            "group_id": article_data.get("group_id"),
-            "event_title": article_data.get("event_title")
-        }
-        
-        res = client.table("articles").insert(record).execute()
-        if res.data and len(res.data) > 0:
-            return res.data[0]
-        return None
-    except Exception as e:
-        logger.error(f"Error saving article with dimensions '{title}': {e}")
-        return None
-
-def store_articles_in_db(articles: List[Dict]):
-    """Stores fetched articles in the Supabase 'articles' table (backwards compatible)."""
-    inserted_count = 0
+    client = client or get_supabase_client()
+    stats = {"received": len(articles), "duplicates": 0, "inserted": 0, "failed": 0,
+             "needs_verification": 0, "unavailable": 0}
+    if not articles:
+        return stats
+    seen_titles, seen_urls = existing_keys(client, articles)
     for article in articles:
+        if normalise_title(article["title"]) in seen_titles or normalise_url(article.get("source_url", "")) in seen_urls:
+            stats["duplicates"] += 1
+            continue
         try:
-            if "dimensions" in article or "credibility_label" in article:
-                saved = save_article_with_dimensions(article)
-                if saved:
-                    inserted_count += 1
+            analysis = analyse(article["title"], article.get("content_summary", ""), article.get("source_domain", ""))
+            saved = _insert(client, build_record(article, analysis))
+            if saved:
+                stats["inserted"] += 1
+                stats["needs_verification"] += int(bool(analysis.get("needs_verification")))
+                stats["unavailable"] += int(analysis.get("analysis_status") == "unavailable")
             else:
-                ai_data = analyze_article_text(article["content_summary"])
-                merged = {**article, **ai_data}
-                saved = save_article_with_dimensions(merged)
-                if saved:
-                    inserted_count += 1
-        except Exception as e:
-            logger.error(f"Error inserting article '{article.get('title')}': {e}")
-            
-    logger.info(f"Successfully processed {inserted_count} out of {len(articles)} articles.")
-    return inserted_count
+                stats["duplicates"] += 1
+            seen_titles.add(normalise_title(article["title"]))
+            seen_urls.add(normalise_url(article.get("source_url", "")))
+        except Exception as exc:
+            stats["failed"] += 1
+            logger.error("Could not store article %r: %s", article.get("title"), exc)
+    logger.info("Ingestion: %s", stats)
+    return stats
+
+
+def update_groups(client=None, now: Optional[datetime] = None) -> Dict[str, int]:
+    """Re-cluster recent articles and write changed group_id / event_title values."""
+    client = client or get_supabase_client()
+    now = now or datetime.now(timezone.utc)
+    since = (now - timedelta(hours=WINDOW_HOURS)).isoformat()
+    rows = (client.table("articles").select("id, title, content_summary, source_domain, published_at, group_id, event_title")
+            .gte("published_at", since).limit(1000).execute().data or [])
+    new = assignments(rows, now)
+    changed = 0
+    for row in rows:
+        target = new.get(str(row["id"]))
+        if target is None:
+            continue
+        if row.get("group_id") != target["group_id"] or row.get("event_title") != target["event_title"]:
+            client.table("articles").update(target).eq("id", row["id"]).execute()
+            changed += 1
+    groups = len({v["group_id"] for v in new.values() if v["group_id"]})
+    logger.info("Grouping: %d articles in window, %d groups, %d rows updated", len(rows), groups, changed)
+    return {"articles": len(rows), "groups": groups, "updated": changed}
+
+
+def reanalyze(ids: Iterable[str], client=None, analyse: Callable[..., Dict[str, Any]] = analyze_article) -> int:
+    """Re-run the analysis on stored articles (e.g. legacy rows) and update them in place."""
+    client = client or get_supabase_client()
+    done = 0
+    for aid in ids:
+        rows = client.table("articles").select("*").eq("id", aid).limit(1).execute().data or []
+        if not rows:
+            continue
+        row = rows[0]
+        analysis = analyse(row["title"], row.get("content_summary") or "", row.get("source_domain") or "")
+        update = {k: v for k, v in build_record({}, analysis).items() if k not in ("category",)}
+        client.table("articles").update(update).eq("id", aid).execute()
+        done += 1
+    return done

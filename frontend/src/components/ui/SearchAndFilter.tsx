@@ -53,6 +53,7 @@ export default function SearchAndFilter({ query, publishers }: SearchAndFilterPr
                         <option value="Low Risk">Low risk</option>
                         <option value="Moderate Risk">Moderate risk</option>
                         <option value="High Risk">High risk</option>
+                        <option value="Unavailable">Not assessed</option>
                     </select>
                 </div>
                 <div>

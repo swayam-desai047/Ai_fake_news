@@ -47,9 +47,9 @@ const GDELT_MIN_GAP_MS = 5500;
 const MAX_RESULTS = 12;
 
 declare global {
-    // eslint-disable-next-line no-var
+     
     var __analysedArticles: Map<string, { at: number; article: Article }> | undefined;
-    // eslint-disable-next-line no-var
+     
     var __searchCache: Map<string, { at: number; response: ExternalSearchResponse }> | undefined;
 }
 
@@ -66,33 +66,15 @@ export function getExternalArticle(id: string): Article | null {
     const hit = analysedArticles.get(id);
     if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.article;
 
-    // Search through recent search results
+    // A recent search result that was not analysed at search time: analyse it now only if the
+    // provider supplied enough text. Headline-only results are not given an article page.
     for (const entry of cache.values()) {
         const found = entry.response.results.find(r => r.id === id);
-        if (found) {
-            const text = [found.title, found.description].filter(Boolean).join('. ');
-            const article = toArticle(found, text);
+        if (found && (found.description ?? '').length >= MIN_EVIDENCE_CHARS) {
+            const article = toArticle(found, found.description!);
             analysedArticles.set(id, { at: Date.now(), article });
             return article;
         }
-    }
-
-    // Fallback: If it's an external article ID, provide a safe dynamic record rather than a 404
-    if (id.startsWith('ex-')) {
-        const dummy: ExternalResult = {
-            id,
-            title: 'Live News Dispatch',
-            publisher: 'Verified Source',
-            url: 'https://news.google.com',
-            publishedAt: new Date().toISOString(),
-            imageUrl: null,
-            description: 'This story was retrieved via the live news search stream.',
-            provider: 'Google News',
-            analysed: true,
-        };
-        const article = toArticle(dummy, dummy.description!);
-        analysedArticles.set(id, { at: Date.now(), article });
-        return article;
     }
 
     return null;
@@ -283,7 +265,7 @@ async function searchGoogleNews(qRaw: string, parsed: ParsedQuery, since?: strin
     const items = xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
 
     const results: ExternalResult[] = items.slice(0, 30).map(item => {
-        let rawTitle = cleanText(tag(item, 'title') ?? '');
+        const rawTitle = cleanText(tag(item, 'title') ?? '');
         const sourceMatch = item.match(/<source[^>]*>([\s\S]*?)<\/source>/i);
         const sourceName = sourceMatch ? cleanText(sourceMatch[1]) : '';
 
@@ -311,14 +293,13 @@ async function searchGoogleNews(qRaw: string, parsed: ParsedQuery, since?: strin
             url: link,
             publishedAt,
             imageUrl: null,
-            description: description || title,
+            description: description && description !== title ? description : null,
             provider: 'Google News' as const,
         };
 
-        const textToAnalyze = [title, description].filter(Boolean).join('. ');
-        const analysed = textToAnalyze.length >= 25;
+        const analysed = (base.description ?? '').length >= MIN_EVIDENCE_CHARS;
         if (analysed) {
-            analysedArticles.set(base.id, { at: Date.now(), article: toArticle(base, textToAnalyze) });
+            analysedArticles.set(base.id, { at: Date.now(), article: toArticle(base, base.description!) });
         }
         return { ...base, analysed };
     });
@@ -342,6 +323,8 @@ export async function searchExternal(q: string, local: Pick<Article, 'sourceUrl'
                 response = await searchGNews(parsed, key);
             } else {
                 response = await searchGoogleNews(q, parsed, since);
+                // An empty Google News answer falls back to GDELT's wider index.
+                if (response.status === 'ok' && response.results.length === 0) response = await searchGdelt(parsed);
             }
         } catch {
             try {

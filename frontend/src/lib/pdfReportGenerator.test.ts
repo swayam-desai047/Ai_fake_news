@@ -46,4 +46,23 @@ describe('generateIntelligencePdf', () => {
         expect(printed).toContain('Headline Accuracy');
         expect(printed).toContain('Rs rally');
     });
+
+    it('prints n/a for unscored dimensions and "Not assessed" instead of a risk label', async () => {
+        recorded.text.length = 0;
+        const analysis = analyseText('Markets fall sharply', '', 'Unknown Blog');
+        const article: Article = {
+            id: 'lv-y', title: 'Markets fall sharply', publisher: 'Unknown Blog', sourceUrl: null,
+            imageUrl: null, excerpt: '', summary: null, summaryKind: null, section: 'business', author: null,
+            publishedAt: null, ingestedAt: null, sentiment: analysis.sentiment,
+            credibility: analysis.credibility, dimensions: analysis.dimensions,
+            groupId: null, eventTitle: null, origin: 'live-feed', analysisMethod: 'heuristic',
+        };
+        await generateIntelligencePdf(article);
+        const printed = recorded.text.join(' ');
+        expect(printed).toContain('Not assessed');
+        expect(printed).toContain('Not computed');
+        expect(printed).toContain('n/a');
+        expect(printed).toContain('headline only');
+        expect(printed).not.toContain('Low Risk');
+    });
 });

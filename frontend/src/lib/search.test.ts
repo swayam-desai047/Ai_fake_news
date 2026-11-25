@@ -118,7 +118,9 @@ describe('external discovery', () => {
         expect(r.status).toBe('ok');
         expect(r.results.map(x => x.title)).toEqual(['Meta hit with privacy lawsuit in Texas']);
         expect(r.results[0]).toMatchObject({ publisher: 'a.com', publishedAt: '2026-10-20T10:15:00Z', provider: 'GDELT', analysed: false });
-        expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('query')).toBe('(facebook OR meta) lawsuit sourcelang:english');
+        // Google News (the keyless default) returned nothing, so the search fell back to GDELT.
+        const gdeltCall = fetchMock.mock.calls.map(c => String(c[0])).find(u => u.includes('gdeltproject'))!;
+        expect(new URL(gdeltCall).searchParams.get('query')).toBe('(facebook OR meta) lawsuit sourcelang:english');
     });
 
     it('uses GNews when a key is configured and analyses only reports with enough text', async () => {

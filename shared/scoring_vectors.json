@@ -1,0 +1,352 @@
+[
+  {
+    "title": "Parliament passes budget",
+    "excerpt": "Lawmakers approved the budget on Tuesday, officials said, after a long debate over spending plans and taxes for the coming year.",
+    "publisher": "BBC News",
+    "expected": {
+      "sentiment": "neutral",
+      "dimensions": {
+        "sentiment": 50,
+        "bias": 90,
+        "objectivity": 92,
+        "readability": 57,
+        "propaganda": 95,
+        "headline_accuracy": 62,
+        "source_credibility": 93,
+        "content_quality": 51,
+        "explanations": {
+          "sentiment": "Balanced or descriptive tone (0 positive, 0 negative cue words).",
+          "bias": "No loaded terms; claims carry explicit attribution.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Flesch Reading Ease 57 — moderately demanding prose.",
+          "propaganda": "No clickbait phrasing, shouting capitals or stacked exclamation detected.",
+          "headline_accuracy": "1 of 3 key headline terms appear in the excerpt.",
+          "source_credibility": "BBC News is listed in the publication's reference table of established newsrooms.",
+          "content_quality": "Feed supplied only 128 characters; quality of the full article cannot be judged."
+        }
+      },
+      "credibility": {
+        "label": "Low Risk",
+        "score": 0.12,
+        "confidence": null,
+        "needsVerification": true,
+        "reasoning": "Rule-based risk score 0.12 (Low Risk). Only 128 characters of publisher text were available, below the 150-character evidence threshold."
+      }
+    }
+  },
+  {
+    "title": "SHOCKING!!! You won’t believe this secret",
+    "excerpt": "Exposed.",
+    "publisher": "Unknown Blog",
+    "expected": {
+      "sentiment": "neutral",
+      "dimensions": {
+        "sentiment": 59,
+        "bias": 84,
+        "objectivity": 92,
+        "readability": 72,
+        "propaganda": 5,
+        "headline_accuracy": 45,
+        "source_credibility": null,
+        "content_quality": 41,
+        "explanations": {
+          "sentiment": "Balanced or descriptive tone (1 positive, 0 negative cue words).",
+          "bias": "No loaded terms detected; the excerpt does not attribute its claims.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Flesch Reading Ease 72 — plain, accessible prose.",
+          "propaganda": "5 sensationalism markers (clickbait phrasing, shouting capitals or stacked exclamation).",
+          "headline_accuracy": "0 of 3 key headline terms appear in the excerpt.",
+          "source_credibility": "Not scored: Unknown Blog is not in the reference table.",
+          "content_quality": "Feed supplied only 8 characters; quality of the full article cannot be judged."
+        }
+      },
+      "credibility": {
+        "label": "Moderate Risk",
+        "score": 0.47,
+        "confidence": null,
+        "needsVerification": true,
+        "reasoning": "Rule-based risk score 0.47 (Moderate Risk). Only 8 characters of publisher text were available, below the 150-character evidence threshold. The score falls inside the 0.40–0.60 uncertainty band. Sensational framing markers were found. The publisher is not in the reference reputation table."
+      }
+    }
+  },
+  {
+    "title": "Headline only story about markets",
+    "excerpt": "",
+    "publisher": "Reuters",
+    "expected": {
+      "sentiment": "neutral",
+      "dimensions": {
+        "sentiment": 50,
+        "bias": 90,
+        "objectivity": 92,
+        "readability": null,
+        "propaganda": 95,
+        "headline_accuracy": null,
+        "source_credibility": 95,
+        "content_quality": null,
+        "explanations": {
+          "sentiment": "Balanced or descriptive tone (0 positive, 0 negative cue words).",
+          "bias": "No loaded terms detected; the excerpt does not attribute its claims.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Not scored: a headline alone is too short for a reading-ease formula.",
+          "propaganda": "No clickbait phrasing, shouting capitals or stacked exclamation detected.",
+          "headline_accuracy": "Not scored: no excerpt was supplied, so the headline could not be checked against body text.",
+          "source_credibility": "Reuters is listed in the publication's reference table of established newsrooms.",
+          "content_quality": "Not scored: the feed supplied a headline only."
+        }
+      },
+      "credibility": {
+        "label": "Low Risk",
+        "score": 0.06,
+        "confidence": null,
+        "needsVerification": true,
+        "reasoning": "Rule-based risk score 0.06 (Low Risk). Only 0 characters of publisher text were available, below the 150-character evidence threshold."
+      }
+    }
+  },
+  {
+    "title": "Headline only story about markets",
+    "excerpt": "",
+    "publisher": "Some Blog",
+    "expected": {
+      "sentiment": "neutral",
+      "dimensions": {
+        "sentiment": 50,
+        "bias": 90,
+        "objectivity": 92,
+        "readability": null,
+        "propaganda": 95,
+        "headline_accuracy": null,
+        "source_credibility": null,
+        "content_quality": null,
+        "explanations": {
+          "sentiment": "Balanced or descriptive tone (0 positive, 0 negative cue words).",
+          "bias": "No loaded terms detected; the excerpt does not attribute its claims.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Not scored: a headline alone is too short for a reading-ease formula.",
+          "propaganda": "No clickbait phrasing, shouting capitals or stacked exclamation detected.",
+          "headline_accuracy": "Not scored: no excerpt was supplied, so the headline could not be checked against body text.",
+          "source_credibility": "Not scored: Some Blog is not in the reference table.",
+          "content_quality": "Not scored: the feed supplied a headline only."
+        }
+      },
+      "credibility": {
+        "label": "Unavailable",
+        "score": null,
+        "confidence": null,
+        "needsVerification": true,
+        "reasoning": "No risk score: the scoreable dimensions carry only 50% of the risk weight (minimum 65%). Only 0 characters of publisher text were available, below the 150-character evidence threshold. The publisher is not in the reference reputation table."
+      }
+    }
+  },
+  {
+    "title": "Markets rally as inflation cools",
+    "excerpt": "Stocks rose sharply on Wednesday after new data showed inflation easing for a third month. Analysts said the figures boost hopes of a rate cut. The index gained 2% in early trading, according to exchange data.",
+    "publisher": "Bloomberg",
+    "expected": {
+      "sentiment": "neutral",
+      "dimensions": {
+        "sentiment": 50,
+        "bias": 90,
+        "objectivity": 92,
+        "readability": 68,
+        "propaganda": 95,
+        "headline_accuracy": 58,
+        "source_credibility": 92,
+        "content_quality": 67,
+        "explanations": {
+          "sentiment": "Balanced or descriptive tone (1 positive, 1 negative cue words).",
+          "bias": "No loaded terms; claims carry explicit attribution.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Flesch Reading Ease 68 — plain, accessible prose.",
+          "propaganda": "No clickbait phrasing, shouting capitals or stacked exclamation detected.",
+          "headline_accuracy": "1 of 4 key headline terms appear in the excerpt.",
+          "source_credibility": "Bloomberg is listed in the publication's reference table of established newsrooms.",
+          "content_quality": "Feed excerpt of 209 characters across 3 sentences."
+        }
+      },
+      "credibility": {
+        "label": "Low Risk",
+        "score": 0.13,
+        "confidence": null,
+        "needsVerification": false,
+        "reasoning": "Rule-based risk score 0.13 (Low Risk)."
+      }
+    }
+  },
+  {
+    "title": "Regime thugs crush protest in brutal crackdown",
+    "excerpt": "The so-called government sent its mob to attack peaceful protesters. It was a horrific and disgraceful display of terror. Obviously the elites do not care.",
+    "publisher": "Patriot Daily",
+    "expected": {
+      "sentiment": "negative",
+      "dimensions": {
+        "sentiment": 23,
+        "bias": 20,
+        "objectivity": 50,
+        "readability": 53,
+        "propaganda": 95,
+        "headline_accuracy": 45,
+        "source_credibility": null,
+        "content_quality": 63,
+        "explanations": {
+          "sentiment": "Predominantly negative framing: 0 positive and 3 negative cue words.",
+          "bias": "5 loaded or partisan terms detected.",
+          "objectivity": "3 evaluative adjectives found; wording leans on judgement rather than fact.",
+          "readability": "Flesch Reading Ease 53 — moderately demanding prose.",
+          "propaganda": "No clickbait phrasing, shouting capitals or stacked exclamation detected.",
+          "headline_accuracy": "0 of 6 key headline terms appear in the excerpt.",
+          "source_credibility": "Not scored: Patriot Daily is not in the reference table.",
+          "content_quality": "Feed excerpt of 155 characters across 3 sentences."
+        }
+      },
+      "credibility": {
+        "label": "Moderate Risk",
+        "score": 0.44,
+        "confidence": null,
+        "needsVerification": true,
+        "reasoning": "Rule-based risk score 0.44 (Moderate Risk). The score falls inside the 0.40–0.60 uncertainty band. The publisher is not in the reference reputation table."
+      }
+    }
+  },
+  {
+    "title": "Scientists report breakthrough in battery research",
+    "excerpt": "Researchers at the university announced a new battery chemistry that could improve storage. The team said the results were confirmed in independent tests.",
+    "publisher": "The Hindu",
+    "expected": {
+      "sentiment": "positive",
+      "dimensions": {
+        "sentiment": 68,
+        "bias": 90,
+        "objectivity": 92,
+        "readability": 42,
+        "propaganda": 95,
+        "headline_accuracy": 55,
+        "source_credibility": 90,
+        "content_quality": 58,
+        "explanations": {
+          "sentiment": "Predominantly positive framing: 2 positive and 0 negative cue words.",
+          "bias": "No loaded terms; claims carry explicit attribution.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Flesch Reading Ease 42 — moderately demanding prose.",
+          "propaganda": "No clickbait phrasing, shouting capitals or stacked exclamation detected.",
+          "headline_accuracy": "1 of 5 key headline terms appear in the excerpt.",
+          "source_credibility": "The Hindu is listed in the publication's reference table of established newsrooms.",
+          "content_quality": "Feed excerpt of 154 characters across 2 sentences."
+        }
+      },
+      "credibility": {
+        "label": "Low Risk",
+        "score": 0.14,
+        "confidence": null,
+        "needsVerification": false,
+        "reasoning": "Rule-based risk score 0.14 (Low Risk)."
+      }
+    }
+  },
+  {
+    "title": "URGENT: Celebrity DESTROYS critics in viral clip",
+    "excerpt": "The clip goes viral as fans celebrate. Must see!!",
+    "publisher": "TMZ Gossip",
+    "expected": {
+      "sentiment": "neutral",
+      "dimensions": {
+        "sentiment": 59,
+        "bias": 84,
+        "objectivity": 92,
+        "readability": 64,
+        "propaganda": 5,
+        "headline_accuracy": 62,
+        "source_credibility": null,
+        "content_quality": 49,
+        "explanations": {
+          "sentiment": "Balanced or descriptive tone (1 positive, 0 negative cue words).",
+          "bias": "No loaded terms detected; the excerpt does not attribute its claims.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Flesch Reading Ease 64 — plain, accessible prose.",
+          "propaganda": "7 sensationalism markers (clickbait phrasing, shouting capitals or stacked exclamation).",
+          "headline_accuracy": "2 of 6 key headline terms appear in the excerpt.",
+          "source_credibility": "Not scored: TMZ Gossip is not in the reference table.",
+          "content_quality": "Feed supplied only 49 characters; quality of the full article cannot be judged."
+        }
+      },
+      "credibility": {
+        "label": "Moderate Risk",
+        "score": 0.44,
+        "confidence": null,
+        "needsVerification": true,
+        "reasoning": "Rule-based risk score 0.44 (Moderate Risk). Only 49 characters of publisher text were available, below the 150-character evidence threshold. The score falls inside the 0.40–0.60 uncertainty band. Sensational framing markers were found. The publisher is not in the reference reputation table."
+      }
+    }
+  },
+  {
+    "title": "Flood warning issued as river rises",
+    "excerpt": "Officials warned residents near the river to prepare for possible evacuation after heavy rain. The water level rose by two metres overnight, the agency said.",
+    "publisher": "NDTV",
+    "expected": {
+      "sentiment": "neutral",
+      "dimensions": {
+        "sentiment": 50,
+        "bias": 90,
+        "objectivity": 92,
+        "readability": 54,
+        "propaganda": 95,
+        "headline_accuracy": 55,
+        "source_credibility": 84,
+        "content_quality": 58,
+        "explanations": {
+          "sentiment": "Balanced or descriptive tone (1 positive, 1 negative cue words).",
+          "bias": "No loaded terms; claims carry explicit attribution.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Flesch Reading Ease 54 — moderately demanding prose.",
+          "propaganda": "No clickbait phrasing, shouting capitals or stacked exclamation detected.",
+          "headline_accuracy": "1 of 5 key headline terms appear in the excerpt.",
+          "source_credibility": "NDTV is listed in the publication's reference table of established newsrooms.",
+          "content_quality": "Feed excerpt of 157 characters across 2 sentences."
+        }
+      },
+      "credibility": {
+        "label": "Low Risk",
+        "score": 0.16,
+        "confidence": null,
+        "needsVerification": false,
+        "reasoning": "Rule-based risk score 0.16 (Low Risk)."
+      }
+    }
+  },
+  {
+    "title": "Same title",
+    "excerpt": "Same title",
+    "publisher": "CNN",
+    "expected": {
+      "sentiment": "neutral",
+      "dimensions": {
+        "sentiment": 50,
+        "bias": 90,
+        "objectivity": 92,
+        "readability": null,
+        "propaganda": 95,
+        "headline_accuracy": null,
+        "source_credibility": 86,
+        "content_quality": null,
+        "explanations": {
+          "sentiment": "Balanced or descriptive tone (0 positive, 0 negative cue words).",
+          "bias": "No loaded terms detected; the excerpt does not attribute its claims.",
+          "objectivity": "No evaluative adjectives from the reference lexicon were found.",
+          "readability": "Not scored: a headline alone is too short for a reading-ease formula.",
+          "propaganda": "No clickbait phrasing, shouting capitals or stacked exclamation detected.",
+          "headline_accuracy": "Not scored: no excerpt was supplied, so the headline could not be checked against body text.",
+          "source_credibility": "CNN is listed in the publication's reference table of established newsrooms.",
+          "content_quality": "Not scored: the feed supplied a headline only."
+        }
+      },
+      "credibility": {
+        "label": "Low Risk",
+        "score": 0.1,
+        "confidence": null,
+        "needsVerification": true,
+        "reasoning": "Rule-based risk score 0.10 (Low Risk). Only 0 characters of publisher text were available, below the 150-character evidence threshold."
+      }
+    }
+  }
+]

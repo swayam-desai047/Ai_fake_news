@@ -79,7 +79,7 @@ export async function generateIntelligencePdf(article: Article): Promise<void> {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.text(pdfSafe(`Generated ${dateTime(new Date().toISOString())}`), M, y);
-    doc.text(pdfSafe(article.analysisMethod === 'model' ? 'Backend model analysis' : 'Rule-based analysis of feed excerpt'), W - M, y, { align: 'right' });
+    doc.text(pdfSafe(article.analysisMethod === 'model' ? 'Backend pipeline analysis (models + rules)' : 'Rule-based analysis of feed excerpt'), W - M, y, { align: 'right' });
     y += 9;
 
     // Article
@@ -100,14 +100,17 @@ export async function generateIntelligencePdf(article: Article): Promise<void> {
     }
     y += 3;
 
-    // Summary
-    const summary = article.summary || article.excerpt;
-    if (summary) {
+    // Excerpt and summary (both printed when both exist; neither is invented)
+    const blocks: [string, string][] = [];
+    if (article.excerpt) blocks.push(['Publisher excerpt (RSS)', article.excerpt]);
+    if (article.summary && article.summaryKind) blocks.push([article.summaryKind === 'ai' ? 'AI summary' : 'Extractive summary', article.summary]);
+    if (blocks.length === 0) blocks.push(['Publisher excerpt (RSS)', 'The feed supplied a headline only.']);
+    for (const [heading, text] of blocks) {
         rule();
         y += 5;
-        label(article.summaryKind === 'ai' ? 'AI summary' : article.summaryKind === 'extractive' ? 'Extractive summary' : 'Publisher excerpt (RSS)');
+        label(heading);
         y += 5;
-        para(summary.replace(/\n\n/g, ' '), 10.5);
+        para(text.replace(/\n\n/g, ' '), 10.5);
         y += 3;
     }
 
@@ -119,19 +122,20 @@ export async function generateIntelligencePdf(article: Article): Promise<void> {
     y += 7;
     const c = article.credibility;
     const cols = [
-        ['Risk label', c.label],
-        ['Risk score (0-1)', c.score !== null ? c.score.toFixed(2) : 'Not recorded'],
-        ['Model confidence', c.confidence !== null ? `${Math.round(c.confidence * 100)}%` : 'Not reported'],
+        ['Risk label', c.label === 'Unavailable' ? 'Not assessed' : c.label],
+        ['Risk score (0-1)', c.score !== null ? c.score.toFixed(2) : 'Not computed'],
+        ['Classifier fake score', typeof c.modelFakeProbability === 'number' ? c.modelFakeProbability.toFixed(2) : 'Not available'],
+        ['Classifier confidence', c.confidence !== null ? `${Math.round(c.confidence * 100)}%` : 'Not reported'],
         ['Verification', c.needsVerification ? 'Needs verification' : 'Not flagged'],
     ];
     cols.forEach(([k, v], i) => {
-        const x = M + (CW / 4) * i;
+        const x = M + (CW / 5) * i;
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(6.5);
         doc.setTextColor(...GREY);
         doc.text(pdfSafe(k.toUpperCase()), x, y);
         doc.setFont('times', 'bold');
-        doc.setFontSize(11);
+        doc.setFontSize(10);
         doc.setTextColor(...INK);
         doc.text(pdfSafe(v), x, y + 5.5);
     });
@@ -164,16 +168,19 @@ export async function generateIntelligencePdf(article: Article): Promise<void> {
             doc.setFontSize(6.5);
             doc.setTextColor(...GREY);
             doc.text(pdfSafe(`0 ${d.low} - 100 ${d.high}`), M, y + 3.6);
-            // score bar
+            // score bar (empty when the dimension could not be scored)
+            const score = dims[d.key];
             doc.setDrawColor(...RULE);
             doc.setLineWidth(0.2);
             doc.rect(M + 48, y - 2.4, 14, 2.2);
-            doc.setFillColor(...INK);
-            doc.rect(M + 48, y - 2.4, (14 * dims[d.key]) / 100, 2.2, 'F');
-            doc.setFont('times', 'bold');
-            doc.setFontSize(10);
+            if (score !== null) {
+                doc.setFillColor(...INK);
+                doc.rect(M + 48, y - 2.4, (14 * score) / 100, 2.2, 'F');
+            }
+            doc.setFont('times', score !== null ? 'bold' : 'italic');
+            doc.setFontSize(score !== null ? 10 : 8);
             doc.setTextColor(...INK);
-            doc.text(String(dims[d.key]), M + 64, y);
+            doc.text(score !== null ? String(score) : 'n/a', M + 64, y);
             doc.setFont('times', 'normal');
             doc.setFontSize(8.5);
             doc.text(lines, M + 70, y);
@@ -189,6 +196,10 @@ export async function generateIntelligencePdf(article: Article): Promise<void> {
     label('Method');
     y += 5;
     para(METHOD_NOTE[article.analysisMethod], 8.5, 'times', 'normal');
+    if (c.status || c.modelVersion) {
+        y += 1;
+        para(`Analysis status: ${c.status ?? 'not recorded'}${c.modelVersion ? ` · ${c.modelVersion}` : ''}`, 8, 'helvetica', 'normal');
+    }
     y += 3;
     rule(0.4, INK);
     y += 5;

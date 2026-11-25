@@ -50,11 +50,12 @@ export default function CrossSourceView({ group, index }: { group: ArticleGroup;
                                 <div className="flex justify-between gap-2"><dt>Tone</dt><dd className="font-semibold !text-[var(--ink)]">{a.sentiment ? TONE[a.sentiment] : 'Not scored'}</dd></div>
                                 {a.dimensions && COMPARE_KEYS.map(k => {
                                     const meta = DIMENSIONS.find(d => d.key === k)!;
+                                    const v = a.dimensions![k];
                                     return (
                                         <div key={k} className="grid grid-cols-[1fr_56px_24px] items-center gap-2">
                                             <dt>{meta.short}</dt>
-                                            <dd className="score-bar" aria-hidden><span className="score-bar__fill" style={{ width: `${a.dimensions![k]}%` }} /></dd>
-                                            <dd className="text-right font-semibold !text-[var(--ink)]">{a.dimensions![k]}</dd>
+                                            <dd className="score-bar" aria-hidden>{v !== null && <span className="score-bar__fill" style={{ width: `${v}%` }} />}</dd>
+                                            <dd className="text-right font-semibold !text-[var(--ink)]">{v ?? 'n/a'}</dd>
                                         </div>
                                     );
                                 })}

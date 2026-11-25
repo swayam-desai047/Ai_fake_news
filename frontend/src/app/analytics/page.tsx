@@ -15,6 +15,7 @@ const RISK_COLOR: Record<string, string> = {
     'Low Risk': '#1E6B3C',
     'Moderate Risk': '#8A5300',
     'High Risk': '#B32121',
+    Unavailable: '#8A8883',
     'Needs Verification': '#3F4E63',
 };
 
@@ -89,14 +90,14 @@ export default async function AnalyticsPage() {
                 <Chart
                     n={2}
                     title="Credibility-risk labels"
-                    note="Risk labels are exclusive; “Needs verification” is a separate flag that can accompany any label (too little text, or an ambiguous score)."
+                    note="Risk labels are exclusive; “Needs verification” is a separate flag that can accompany any label (too little text, an ambiguous score, low classifier confidence, or the classifier and the rules disagreeing). “Not assessed” means no risk score could be computed."
                     source={`${source} Labels are indicators, not verdicts.`}
                 >
                     <HorizontalBars
                         ariaLabel={`Risk labels: ${a.risk.map(r => `${r.label} ${r.count}`).join(', ')}`}
                         labelWidth={128}
                         data={a.risk.map(r => ({
-                            label: r.label,
+                            label: r.label === 'Unavailable' ? 'Not assessed' : r.label,
                             value: r.count,
                             color: RISK_COLOR[r.label],
                             note: `${Math.round((r.count / total) * 100)}% of reports`,
@@ -115,15 +116,15 @@ export default async function AnalyticsPage() {
                     n={4}
                     title="Average dimension scores"
                     note="Mean 0–100 score per dimension. Scales differ in direction: Sentiment centres on 50 (neutral), Readability is ease of reading, and the rest run from weak to strong."
-                    source={`${source} n = ${a.dimensionAverages[0]?.n ?? 0} scored reports.`}
+                    source={`${source} Each average uses only the reports where that dimension could be scored (n in the tooltip).`}
                 >
                     <HorizontalBars
-                        ariaLabel={`Average scores: ${a.dimensionAverages.map(d => `${d.key} ${d.average}`).join(', ')}`}
+                        ariaLabel={`Average scores: ${a.dimensionAverages.map(d => `${d.key} ${d.average ?? 'not scored'}`).join(', ')}`}
                         max={100}
                         labelWidth={150}
-                        data={a.dimensionAverages.map(d => {
+                        data={a.dimensionAverages.filter(d => d.average !== null).map(d => {
                             const meta = DIMENSIONS.find(m => m.key === d.key)!;
-                            return { label: meta.label, value: d.average, note: `0 = ${meta.low} · 100 = ${meta.high}` };
+                            return { label: meta.label, value: d.average as number, note: `n = ${d.n} · 0 = ${meta.low} · 100 = ${meta.high}` };
                         })}
                     />
                 </Chart>

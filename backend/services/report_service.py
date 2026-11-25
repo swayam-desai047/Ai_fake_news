@@ -3,7 +3,7 @@ Executive PDF report generation (handover §6 step 4).
 
 Builds an A4 report for one article using ReportLab: header with platform metadata and
 timestamp, headline and provenance, AI summary, credibility label and confidence, the eight
-dimension scores with explanations, and the academic disclaimer. Values that were never
+dimension scores with explanations, the analysis method/model version and the academic disclaimer. Values that were never
 recorded are printed as "Not recorded" rather than filled in.
 """
 from datetime import datetime, timezone
@@ -23,6 +23,15 @@ GREY = colors.HexColor("#626262")
 RULE = colors.HexColor("#D8D6D0")
 PAPER = colors.HexColor("#F0EEE8")
 
+METHOD_NOTE = (
+    "Eight dimensions are scored by transparent rules applied to the headline and the publisher's feed "
+    "excerpt (word lists, Flesch Reading Ease, headline-to-excerpt term overlap and a hand-curated publisher "
+    "table); dimensions that cannot be measured from the available text are left unscored. When the models "
+    "are available, the sentiment dimension uses DistilBERT SST-2 and the risk score is the mean of the "
+    "rule-based risk and the BERT-tiny classifier's fake-class score. Model scores are raw softmax outputs, "
+    "not calibrated probabilities. Risk labels: Low <= 0.35 < Moderate <= 0.65 < High."
+)
+
 DISCLAIMER = (
     "This report provides AI-generated indicators for critical evaluation and does not "
     "constitute absolute proof of factual truth."
@@ -35,7 +44,7 @@ DIMENSIONS = [
     ("readability", "Readability", "0 dense - 100 plain"),
     ("propaganda", "Propaganda / Manipulation", "0 many markers - 100 none detected"),
     ("headline_accuracy", "Headline Accuracy", "0 unsupported - 100 supported"),
-    ("source_credibility", "Source Credibility", "0 unrated - 100 established"),
+    ("source_credibility", "Source Credibility", "0 weak - 100 established"),
     ("content_quality", "Content Quality", "0 thin - 100 complete"),
 ]
 
@@ -80,10 +89,15 @@ def build_article_report(article: Dict[str, Any]) -> bytes:
         story.append(Paragraph(f'Source: <link href="{url}" color="#171717">{url}</link>', meta))
     story.append(Spacer(1, 4 * mm))
 
-    summary = article.get("ai_summary") or article.get("content_summary")
-    if summary:
+    boxes = []
+    if article.get("content_summary"):
+        boxes.append(("PUBLISHER EXCERPT (RSS)", article["content_summary"]))
+    if article.get("ai_summary"):
+        kind = "EXTRACTIVE SUMMARY" if article.get("summary_method", "extractive") == "extractive" else "AI SUMMARY"
+        boxes.append((kind, article["ai_summary"]))
+    for heading, text in boxes:
         box = Table(
-            [[Paragraph("AI SUMMARY" if article.get("ai_summary") else "STORED EXCERPT", label)], [Paragraph(escape(summary), body)]],
+            [[Paragraph(heading, label)], [Paragraph(escape(text), body)]],
             colWidths=[doc.width],
         )
         box.setStyle(TableStyle([
@@ -92,20 +106,25 @@ def build_article_report(article: Dict[str, Any]) -> bytes:
             ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
             ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, -1), (-1, -1), 8),
         ]))
-        story += [box, Spacer(1, 5 * mm)]
+        story += [box, Spacer(1, 4 * mm)]
+    if not boxes:
+        story += [Paragraph("<i>The feed supplied a headline only; no excerpt is stored.</i>", small), Spacer(1, 4 * mm)]
 
     confidence = article.get("confidence_level")
     risk_score = article.get("risk_score")
+    p_fake = article.get("model_fake_probability")
+    label_text = article.get("credibility_label") or "Unavailable"
     cred_rows = [
-        [Paragraph(h, label) for h in ("RISK LABEL", "RISK SCORE (0-1)", "CONFIDENCE", "VERIFICATION")],
+        [Paragraph(h, label) for h in ("RISK LABEL", "RISK SCORE (0-1)", "CLASSIFIER FAKE SCORE", "CLASSIFIER CONFIDENCE", "VERIFICATION")],
         [
-            Paragraph(_text(article.get("credibility_label")), body),
-            Paragraph(f"{risk_score:.2f}" if isinstance(risk_score, (int, float)) else "Not recorded", body),
+            Paragraph(escape(label_text), body),
+            Paragraph(f"{risk_score:.2f}" if isinstance(risk_score, (int, float)) else "Not computed", body),
+            Paragraph(f"{p_fake:.2f}" if isinstance(p_fake, (int, float)) else "Not available", body),
             Paragraph(f"{round(confidence * 100)}%" if isinstance(confidence, (int, float)) else "Not reported", body),
             Paragraph("Needs verification" if article.get("needs_verification") else "Not flagged", body),
         ],
     ]
-    cred = Table(cred_rows, colWidths=[doc.width / 4] * 4)
+    cred = Table(cred_rows, colWidths=[doc.width / 5] * 5)
     cred.setStyle(TableStyle([
         ("LINEABOVE", (0, 0), (-1, 0), 1, INK),
         ("LINEBELOW", (0, -1), (-1, -1), 0.4, RULE),
@@ -127,7 +146,7 @@ def build_article_report(article: Dict[str, Any]) -> bytes:
             score = dims.get(key)
             rows.append([
                 Paragraph(f"<b>{name}</b><br/><font size=6.5 color='#626262'>{scale}</font>", small),
-                Paragraph(f"<b>{round(score)}</b>" if isinstance(score, (int, float)) else "—", body),
+                Paragraph(f"<b>{round(score)}</b>" if isinstance(score, (int, float)) else "<i>n/a</i>", body),
                 Paragraph(_text(explanations.get(key), "No explanation recorded."), small),
             ])
         table = Table(rows, colWidths=[doc.width * 0.32, doc.width * 0.1, doc.width * 0.58], repeatRows=1)
@@ -141,8 +160,16 @@ def build_article_report(article: Dict[str, Any]) -> bytes:
         ]))
         story.append(table)
 
+    status = article.get("analysis_status") or "legacy (analysed before pipeline 2.0)"
     story += [
-        Spacer(1, 8 * mm),
+        Spacer(1, 6 * mm),
+        Paragraph("ANALYSIS METHOD", label),
+        Paragraph(escape(METHOD_NOTE), small),
+        Spacer(1, 2 * mm),
+        Paragraph(f"Status: {_text(status)} · Method: {_text(article.get('analysis_method'), 'not recorded')} · "
+                  f"Models/version: {_text(article.get('model_version'), 'not recorded')} · "
+                  f"Analysed: {_text(article.get('analyzed_at') or article.get('created_at'))}", meta),
+        Spacer(1, 6 * mm),
         HRFlowable(width="100%", thickness=0.8, color=INK, spaceAfter=3 * mm),
         Paragraph(f"<i>{DISCLAIMER}</i>", small),
     ]

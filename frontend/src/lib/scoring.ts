@@ -14,6 +14,10 @@ import type { CredibilityAssessment, DimensionScores, RiskLabel, Sentiment } fro
  *  - headline_accuracy:  share of headline terms supported by the excerpt
  *  - source_credibility: publisher reputation from a hand-curated reference table
  *  - content_quality:    completeness of the supplied excerpt (not the full article)
+ *
+ * A dimension that cannot be measured from the available text is `null` (with an explanation),
+ * never a placeholder number. The backend mirrors this file exactly in
+ * backend/services/dimension_service.py; shared/scoring_vectors.json keeps the two in step.
  */
 
 /** Hand-curated reference table (handover §6 step 2: "domain authority dictionary"). */
@@ -33,7 +37,6 @@ const PUBLISHER_REPUTATION: [string, number][] = [
     ['cnn', 86],
     ['yahoo', 78],
 ];
-const UNKNOWN_PUBLISHER_SCORE = 60;
 
 const POSITIVE = ['surge', 'gain', 'gains', 'milestone', 'breakthrough', 'success', 'record', 'win', 'wins', 'won', 'growth', 'rise', 'rises', 'improve', 'improves', 'celebrate', 'recovery', 'hope', 'boost', 'praise', 'award', 'agreement', 'deal'];
 const NEGATIVE = ['crash', 'collapse', 'death', 'dead', 'dies', 'died', 'killed', 'kill', 'fraud', 'theft', 'warning', 'ban', 'threat', 'scandal', 'loss', 'arrest', 'arrested', 'panic', 'terror', 'attack', 'war', 'crisis', 'fall', 'falls', 'cut', 'cuts', 'fear', 'fears', 'violence', 'shooting', 'injured', 'sanction', 'sanctions', 'protest', 'accused', 'condemns'];
@@ -106,13 +109,55 @@ export function riskLabelFor(score: number): RiskLabel {
     return 'High Risk';
 }
 
+/** Sentiment label from the 0–100 sentiment dimension (same thresholds in the backend). */
+export function sentimentFromScore(score: number): Sentiment {
+    return score >= 60 ? 'positive' : score <= 40 ? 'negative' : 'neutral';
+}
+
 /** Below this many characters of supplied text the heuristic has too little evidence to rely on. */
 export const MIN_EVIDENCE_CHARS = 150;
+
+/** Weights of the dimensions that bear on credibility risk (mirrored in backend/services/dimension_service.py). */
+export const RISK_WEIGHTS = {
+    source_credibility: 0.35,
+    propaganda: 0.2,
+    objectivity: 0.15,
+    bias: 0.15,
+    headline_accuracy: 0.15,
+} as const;
+
+/** If the dimensions that could be scored carry less than this share of the weight, no risk score is given. */
+export const MIN_RISK_WEIGHT = 0.65;
+
+/** The 0.40–0.60 band in which a risk score is treated as ambiguous. */
+export const UNCERTAINTY_BAND: [number, number] = [0.4, 0.6];
 
 export interface HeuristicResult {
     sentiment: Sentiment;
     dimensions: DimensionScores;
     credibility: CredibilityAssessment;
+}
+
+export interface RuleRisk {
+    score: number | null;
+    availableWeight: number;
+}
+
+/** Rule-based risk: inverse of the weighted composite of the scoreable credibility dimensions. */
+export function ruleRisk(dims: DimensionScores): RuleRisk {
+    let weight = 0;
+    let total = 0;
+    for (const [key, w] of Object.entries(RISK_WEIGHTS) as [keyof typeof RISK_WEIGHTS, number][]) {
+        const v = dims[key];
+        if (typeof v === 'number') {
+            weight += w;
+            total += v * w;
+        }
+    }
+    weight = Math.round(weight * 100) / 100;
+    if (weight < MIN_RISK_WEIGHT) return { score: null, availableWeight: weight };
+    const composite = total / weight / 100;
+    return { score: Math.round((1 - composite) * 100) / 100, availableWeight: weight };
 }
 
 export function analyseText(title: string, excerpt: string, publisher: string): HeuristicResult {
@@ -124,7 +169,7 @@ export function analyseText(title: string, excerpt: string, publisher: string): 
     const pos = countHits(combined, POSITIVE);
     const neg = countHits(combined, NEGATIVE);
     const sentimentScore = clamp(50 + (pos - neg) * 9, 5, 95);
-    const sentiment: Sentiment = sentimentScore >= 60 ? 'positive' : sentimentScore <= 40 ? 'negative' : 'neutral';
+    const sentiment = sentimentFromScore(sentimentScore);
     const sentimentExpl = sentiment === 'neutral'
         ? `Balanced or descriptive tone (${pos} positive, ${neg} negative cue words).`
         : `Predominantly ${sentiment} framing: ${pos} positive and ${neg} negative cue words.`;
@@ -146,10 +191,12 @@ export function analyseText(title: string, excerpt: string, publisher: string): 
             ? 'No loaded terms; claims carry explicit attribution.'
             : 'No loaded terms detected; the excerpt does not attribute its claims.';
 
-    // 4. Readability
+    // 4. Readability (needs running text, not a headline alone)
     const flesch = fleschReadingEase(combined);
-    const readability = clamp(flesch);
-    const readabilityExpl = `Flesch Reading Ease ${Math.round(flesch)} — ${readability >= 60 ? 'plain, accessible prose' : readability >= 40 ? 'moderately demanding prose' : 'dense, technical prose'}.`;
+    const readability = body ? clamp(flesch) : null;
+    const readabilityExpl = readability === null
+        ? 'Not scored: a headline alone is too short for a reading-ease formula.'
+        : `Flesch Reading Ease ${Math.round(flesch)} — ${readability >= 60 ? 'plain, accessible prose' : readability >= 40 ? 'moderately demanding prose' : 'dense, technical prose'}.`;
 
     // 5. Propaganda / manipulation
     const manip = MANIPULATION.filter(re => re.test(combined)).length;
@@ -159,29 +206,33 @@ export function analyseText(title: string, excerpt: string, publisher: string): 
         ? `${manip + shouting} sensationalism marker${manip + shouting > 1 ? 's' : ''} (clickbait phrasing, shouting capitals or stacked exclamation).`
         : 'No clickbait phrasing, shouting capitals or stacked exclamation detected.';
 
-    // 6. Headline accuracy
+    // 6. Headline accuracy (needs body text and at least one key headline term)
     const headTerms = words(title).filter(w => w.length > 3 && !STOPWORDS.has(w));
     const bodyTerms = new Set(words(body));
     const matched = headTerms.filter(t => bodyTerms.has(t) || bodyTerms.has(t.replace(/s$/, ''))).length;
     const ratio = headTerms.length ? matched / headTerms.length : 0;
-    const headline_accuracy = body ? clamp(45 + ratio * 50) : 50;
-    const headlineExpl = body
-        ? `${matched} of ${headTerms.length} key headline terms appear in the excerpt.`
-        : 'No excerpt supplied, so the headline could not be checked against body text.';
+    const headline_accuracy = body && headTerms.length ? clamp(45 + ratio * 50) : null;
+    const headlineExpl = !body
+        ? 'Not scored: no excerpt was supplied, so the headline could not be checked against body text.'
+        : headTerms.length
+            ? `${matched} of ${headTerms.length} key headline terms appear in the excerpt.`
+            : 'Not scored: the headline has no key terms to check.';
 
-    // 7. Source credibility
+    // 7. Source credibility (reference table only; unknown publishers are not given a number)
     const rep = publisherReputation(publisher);
-    const source_credibility = rep ?? UNKNOWN_PUBLISHER_SCORE;
+    const source_credibility = rep;
     const sourceExpl = rep !== null
         ? `${publisher} is listed in the publication's reference table of established newsrooms.`
-        : `${publisher || 'This publisher'} is not in the reference table; treated as unrated.`;
+        : `Not scored: ${publisher || 'this publisher'} is not in the reference table.`;
 
     // 8. Content quality (of the excerpt we were given)
     const sentences = splitSentences(body).length;
-    const content_quality = clamp(35 + Math.min(evidenceChars, 600) / 12 + Math.min(sentences, 4) * 5);
-    const contentExpl = evidenceChars < MIN_EVIDENCE_CHARS
-        ? `Feed supplied only ${evidenceChars} characters; quality of the full article cannot be judged.`
-        : `Feed excerpt of ${evidenceChars} characters across ${sentences} sentence${sentences === 1 ? '' : 's'}.`;
+    const content_quality = body ? clamp(35 + Math.min(evidenceChars, 600) / 12 + Math.min(sentences, 4) * 5) : null;
+    const contentExpl = !body
+        ? 'Not scored: the feed supplied a headline only.'
+        : evidenceChars < MIN_EVIDENCE_CHARS
+            ? `Feed supplied only ${evidenceChars} characters; quality of the full article cannot be judged.`
+            : `Feed excerpt of ${evidenceChars} characters across ${sentences} sentence${sentences === 1 ? '' : 's'}.`;
 
     const dimensions: DimensionScores = {
         sentiment: sentimentScore,
@@ -204,22 +255,16 @@ export function analyseText(title: string, excerpt: string, publisher: string): 
         },
     };
 
-    // Risk: inverse of a weighted composite of the dimensions that bear on credibility.
-    const composite = (
-        source_credibility * 0.35 +
-        propaganda * 0.2 +
-        objectivity * 0.15 +
-        bias * 0.15 +
-        headline_accuracy * 0.15
-    ) / 100;
-    const score = Math.round((1 - composite) * 100) / 100;
-    const label = riskLabelFor(score);
-    const ambiguous = score >= 0.4 && score <= 0.6;
+    const { score, availableWeight } = ruleRisk(dimensions);
+    const label = score === null ? 'Unavailable' : riskLabelFor(score);
+    const ambiguous = score !== null && score >= UNCERTAINTY_BAND[0] && score <= UNCERTAINTY_BAND[1];
     const thin = evidenceChars < MIN_EVIDENCE_CHARS;
-    const needsVerification = ambiguous || thin;
+    const needsVerification = score === null || ambiguous || thin;
 
     const reasons: string[] = [];
-    reasons.push(`Rule-based risk score ${score.toFixed(2)} (${label}).`);
+    reasons.push(score === null
+        ? `No risk score: the scoreable dimensions carry only ${Math.round(availableWeight * 100)}% of the risk weight (minimum ${Math.round(MIN_RISK_WEIGHT * 100)}%).`
+        : `Rule-based risk score ${score.toFixed(2)} (${label}).`);
     if (thin) reasons.push(`Only ${evidenceChars} characters of publisher text were available, below the ${MIN_EVIDENCE_CHARS}-character evidence threshold.`);
     if (ambiguous) reasons.push('The score falls inside the 0.40–0.60 uncertainty band.');
     if (manip + shouting > 0) reasons.push('Sensational framing markers were found.');

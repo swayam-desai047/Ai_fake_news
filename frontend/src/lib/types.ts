@@ -17,6 +17,8 @@ export type SectionSlug =
     | 'sports';
 
 export type RiskLabel = 'Low Risk' | 'Moderate Risk' | 'High Risk';
+/** `Unavailable`: no risk score could be computed (too little evidence, or analysis still pending). */
+export type CredibilityLabel = RiskLabel | 'Unavailable';
 export type Sentiment = 'positive' | 'negative' | 'neutral';
 
 export const DIMENSION_KEYS = [
@@ -32,7 +34,8 @@ export const DIMENSION_KEYS = [
 
 export type DimensionKey = (typeof DIMENSION_KEYS)[number];
 
-export type DimensionScores = Record<DimensionKey, number> & {
+/** `null` = the dimension could not be measured from the available text (see its explanation). */
+export type DimensionScores = Record<DimensionKey, number | null> & {
     explanations: Partial<Record<DimensionKey, string>>;
 };
 
@@ -42,19 +45,25 @@ export type ArticleOrigin = 'database' | 'live-feed' | 'external';
 
 /**
  * How the credibility indicators were produced.
- *  - `model`: the backend's BERT-tiny classifier + dimension engine (stored in Supabase).
+ *  - `model`: the backend pipeline (BERT-tiny classifier + SST-2 sentiment + the same rule-based
+ *    dimension engine), stored in Supabase at ingestion time.
  *  - `heuristic`: the frontend's transparent lexical rules, applied to live feed excerpts.
  */
 export type AnalysisMethod = 'model' | 'heuristic';
 
 export interface CredibilityAssessment {
-    label: RiskLabel;
+    label: CredibilityLabel;
     /** 0 (no risk markers) → 1 (many risk markers). Not a calibrated probability. */
     score: number | null;
     /** Only present when the producing model reports one. Never synthesised. */
     confidence: number | null;
     needsVerification: boolean;
     reasoning: string | null;
+    /** Raw fake-class probability from the classifier (uncalibrated), when the model ran. */
+    modelFakeProbability?: number | null;
+    /** e.g. `complete`, `partial` (model unavailable, rules only), `unavailable`, `legacy`. */
+    status?: string | null;
+    modelVersion?: string | null;
 }
 
 export interface Article {
@@ -92,7 +101,7 @@ export interface ArticleQuery {
     q?: string;
     section?: SectionSlug | '';
     publisher?: string;
-    risk?: RiskLabel | '';
+    risk?: CredibilityLabel | '';
     needsVerification?: boolean;
     /** Searches default to relevance; listings without a query default to newest. */
     sort?: 'relevance' | 'newest' | 'oldest';
@@ -123,9 +132,10 @@ export interface EditionInfo {
 export interface AnalyticsSummary {
     edition: EditionInfo;
     sections: { section: SectionSlug; count: number }[];
-    risk: { label: RiskLabel | 'Needs Verification'; count: number }[];
+    risk: { label: CredibilityLabel | 'Needs Verification'; count: number }[];
     sentiment: { sentiment: Sentiment | 'unscored'; count: number }[];
-    dimensionAverages: { key: DimensionKey; average: number; n: number }[];
+    /** `average` is null when no article has a score for that dimension; `n` counts scored articles. */
+    dimensionAverages: { key: DimensionKey; average: number | null; n: number }[];
     publishers: { publisher: string; count: number }[];
     timeline: { hour: string; count: number }[];
     coverage: {

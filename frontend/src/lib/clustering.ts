@@ -6,7 +6,10 @@ import type { Article, ArticleGroup } from './types';
  * Headline + lead sentence are vectorised with TF-IDF and compared by cosine similarity.
  * Grouping is seed-based (each article is compared with the group's seed only) so unrelated
  * stories cannot be chained together through a shared middle article. A group is only kept when
- * it contains at least two different publishers.
+ * it contains at least two different publishers. A candidate must also be published within
+ * MAX_GAP_HOURS of the seed. Mirrored in backend/services/clustering_service.py.
+ *
+ * Similarity means "probably the same event"; it is not claim verification.
  */
 
 const STOPWORDS = new Set(
@@ -20,6 +23,8 @@ const STOPWORDS = new Set(
 /** Minimum cosine similarity for two reports to be treated as the same event. */
 export const SIMILARITY_THRESHOLD = 0.32;
 const WINDOW_HOURS = 48;
+/** A candidate must be published within this many hours of the group's seed (when both have times). */
+export const MAX_GAP_HOURS = 36;
 
 function tokens(text: string): string[] {
     return text
@@ -87,6 +92,8 @@ export function clusterArticles(articles: Article[], now = Date.now()): ArticleG
         const members = [i];
         for (let j = i + 1; j < pool.length; j++) {
             if (assigned.has(j)) continue;
+            const ti = Date.parse(pool[i].publishedAt ?? ''), tj = Date.parse(pool[j].publishedAt ?? '');
+            if (Number.isFinite(ti) && Number.isFinite(tj) && Math.abs(ti - tj) > MAX_GAP_HOURS * 3600_000) continue;
             if (cosine(vecs[i], vecs[j]) >= SIMILARITY_THRESHOLD) members.push(j);
         }
         const arts = members.map(m => pool[m]);

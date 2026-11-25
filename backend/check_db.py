@@ -1,13 +1,10 @@
-import os
-from dotenv import load_dotenv
-from supabase import create_client, Client
+"""Quick connectivity check: prints the five most recently ingested articles."""
+from db.supabase import get_supabase_client
 
-load_dotenv()
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_KEY")
-client: Client = create_client(supabase_url, supabase_key)
-
-response = client.table("articles").select("title, credibility_score, ai_reasoning, published_at, created_at").order("created_at", desc=True).limit(5).execute()
-print("Top 5 latest articles by created_at:")
+client = get_supabase_client()
+response = (client.table("articles")
+            .select("title, credibility_label, risk_score, analysis_status, published_at, created_at")
+            .order("created_at", desc=True).limit(5).execute())
+print("Five most recently ingested articles:")
 for r in response.data:
     print(r)

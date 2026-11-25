@@ -12,6 +12,7 @@ import {
     type ArticleGroup,
     type ArticlePage,
     type ArticleQuery,
+    type CredibilityLabel,
     type DimensionScores,
     type EditionInfo,
     type RiskLabel,
@@ -58,32 +59,40 @@ interface ArticleRow {
     event_title?: string | null;
     published_at?: string | null;
     created_at?: string | null;
+    analysis_status?: string | null;
+    analysis_method?: string | null;
+    model_version?: string | null;
+    summary_method?: string | null;
+    model_fake_probability?: number | null;
 }
 
+/**
+ * Stored dimension JSON → DimensionScores. A dimension may be `null` (not measurable from the text);
+ * a record with no numeric score at all is treated as "no analysis".
+ */
 function toDimensions(raw: Record<string, unknown> | null | undefined): DimensionScores | null {
     if (!raw || typeof raw !== 'object') return null;
     const present = DIMENSION_KEYS.filter(k => typeof raw[k] === 'number');
-    if (present.length < DIMENSION_KEYS.length) return null;
-    const scores = Object.fromEntries(DIMENSION_KEYS.map(k => [k, Math.round(raw[k] as number)]));
+    if (present.length === 0) return null;
+    const scores = Object.fromEntries(DIMENSION_KEYS.map(k => [k, typeof raw[k] === 'number' ? Math.round(raw[k] as number) : null]));
     const explanations = (raw.explanations && typeof raw.explanations === 'object' ? raw.explanations : {}) as DimensionScores['explanations'];
-    return { ...(scores as Record<(typeof DIMENSION_KEYS)[number], number>), explanations };
+    return { ...(scores as Record<(typeof DIMENSION_KEYS)[number], number | null>), explanations };
 }
 
 const RISK_LABELS: RiskLabel[] = ['Low Risk', 'Moderate Risk', 'High Risk'];
 
 function normaliseRow(row: ArticleRow): Article {
     const excerpt = row.content_summary?.trim() ?? '';
-    // Pre-migration rows carry only the classifier's `credibility_score`; risk is its complement.
-    const riskScore = typeof row.risk_score === 'number'
-        ? row.risk_score
-        : typeof row.credibility_score === 'number' ? Math.round((1 - row.credibility_score) * 100) / 100 : null;
-    const label = RISK_LABELS.includes(row.credibility_label as RiskLabel)
+    // Only a stored risk score is shown. Legacy rows (written before pipeline 2.0) have none and are
+    // shown as "not assessed" until backend/scripts/reanalyze.py re-scores them; no label is guessed.
+    const riskScore = typeof row.risk_score === 'number' ? row.risk_score : null;
+    const label: CredibilityLabel = RISK_LABELS.includes(row.credibility_label as RiskLabel)
         ? (row.credibility_label as RiskLabel)
-        : riskScore !== null ? riskLabelFor(riskScore) : 'Moderate Risk';
+        : riskScore !== null ? riskLabelFor(riskScore) : 'Unavailable';
     const confidence = typeof row.confidence_level === 'number' ? row.confidence_level : null;
     const needsVerification = typeof row.needs_verification === 'boolean'
-        ? row.needs_verification
-        : (confidence !== null && confidence >= 0.4 && confidence <= 0.6) || excerpt.length < MIN_EVIDENCE_CHARS;
+        ? row.needs_verification || label === 'Unavailable'
+        : label === 'Unavailable' || excerpt.length < MIN_EVIDENCE_CHARS;
     const sentiment = (['positive', 'negative', 'neutral'] as Sentiment[]).includes(row.sentiment as Sentiment)
         ? (row.sentiment as Sentiment)
         : null;
@@ -96,7 +105,8 @@ function normaliseRow(row: ArticleRow): Article {
         imageUrl: null,
         excerpt,
         summary: row.ai_summary?.trim() || null,
-        summaryKind: row.ai_summary?.trim() ? 'ai' : null,
+        // The backend's summaries are extractive (sentences selected from the excerpt).
+        summaryKind: row.ai_summary?.trim() ? (row.summary_method === 'abstractive' ? 'ai' : 'extractive') : null,
         section: sectionFromCategory(row.category),
         author: null,
         publishedAt: row.published_at ?? null,
@@ -108,6 +118,9 @@ function normaliseRow(row: ArticleRow): Article {
             confidence,
             needsVerification,
             reasoning: row.ai_reasoning ?? null,
+            modelFakeProbability: typeof row.model_fake_probability === 'number' ? row.model_fake_probability : null,
+            status: row.analysis_status ?? (row.risk_score == null ? 'legacy' : null),
+            modelVersion: row.model_version ?? null,
         },
         dimensions: toDimensions(row.dimensions),
         groupId: row.group_id ?? null,
@@ -357,7 +370,7 @@ export async function getAnalytics(): Promise<AnalyticsSummary> {
         .sort((a, b) => b.count - a.count);
 
     const risk: AnalyticsSummary['risk'] = [
-        ...RISK_LABELS.map(label => ({ label, count: articles.filter(a => a.credibility.label === label).length })),
+        ...([...RISK_LABELS, 'Unavailable'] as CredibilityLabel[]).map(label => ({ label, count: articles.filter(a => a.credibility.label === label).length })),
         { label: 'Needs Verification', count: articles.filter(a => a.credibility.needsVerification).length },
     ];
 
@@ -368,12 +381,10 @@ export async function getAnalytics(): Promise<AnalyticsSummary> {
     const unscored = articles.filter(a => !a.sentiment).length;
     if (unscored) sentiment.push({ sentiment: 'unscored', count: unscored });
 
-    const scored = articles.filter(a => a.dimensions);
-    const dimensionAverages = DIMENSION_KEYS.map(key => ({
-        key,
-        n: scored.length,
-        average: scored.length ? Math.round(scored.reduce((s, a) => s + a.dimensions![key], 0) / scored.length) : 0,
-    }));
+    const dimensionAverages = DIMENSION_KEYS.map(key => {
+        const vals = articles.map(a => a.dimensions?.[key]).filter((v): v is number => typeof v === 'number');
+        return { key, n: vals.length, average: vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null };
+    });
 
     const pubCounts = new Map<string, number>();
     for (const a of articles) pubCounts.set(a.publisher, (pubCounts.get(a.publisher) ?? 0) + 1);

@@ -429,6 +429,8 @@ img { display: block; max-width: 100%; }
 .risk--moderate { color: var(--risk-moderate); }
 .risk--high { color: var(--risk-high); }
 .risk--verify { color: var(--risk-verify); }
+.risk--unavailable { color: var(--ink-3, #8a8883); }
+.risk--unavailable .risk__dot { background: transparent; border: 1px solid currentColor; }
 .risk--verify .risk__dot {
   background: transparent;
   border: 1.5px solid currentColor;

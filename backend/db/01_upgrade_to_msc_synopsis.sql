@@ -5,7 +5,7 @@
 ALTER TABLE articles
   ADD COLUMN IF NOT EXISTS risk_score REAL,
   ADD COLUMN IF NOT EXISTS confidence_level REAL,
-  ADD COLUMN IF NOT EXISTS credibility_label TEXT DEFAULT 'Low Risk',
+  ADD COLUMN IF NOT EXISTS credibility_label TEXT,  -- no default: unanalysed is not 'Low Risk' (see 02)
   ADD COLUMN IF NOT EXISTS needs_verification BOOLEAN DEFAULT FALSE;
 
 -- 2. Add AI Summarization Field

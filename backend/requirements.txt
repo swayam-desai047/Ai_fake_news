@@ -1,17 +1,25 @@
+# Web API
 fastapi>=0.110.0
 uvicorn>=0.28.0
 pydantic>=2.6.4
-supabase>=2.3.4
-transformers>=4.38.0
-torch>=2.2.0
-feedparser>=6.0.11
-beautifulsoup4>=4.12.3
-pytest>=8.2.2
 python-dotenv>=1.0.1
 httpx>=0.27.0
-textstat>=0.7.3
-scikit-learn>=1.4.0
-reportlab>=4.1.0
-sumy>=0.11.0
-nltk>=3.8.1
+
+# Database
+supabase>=2.3.4
+
+# Collection + scheduling
+feedparser>=6.0.11
+beautifulsoup4>=4.12.3
 apscheduler>=3.11.3
+
+# AI models (loaded lazily on first use)
+transformers>=4.38.0
+torch>=2.2.0
+
+# PDF reports
+reportlab>=4.1.0
+
+# Tests
+pytest>=8.2.2
+pypdf>=4.0

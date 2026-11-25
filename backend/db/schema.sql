@@ -1,6 +1,8 @@
 -- ============================================================
--- AI News Aggregator — Complete Database Schema
--- Run this in the Supabase SQL Editor
+-- AI News Aggregator — ORIGINAL (v1) schema, kept for reference.
+-- For a new database run supabase_complete_setup.sql instead. For an existing v1 database run
+-- 01_upgrade_to_msc_synopsis.sql and then 02_integrity_and_security.sql.
+-- Policy statements below were made idempotent and articles are read-only for the public key.
 -- © 2026 AK 0121 Agency
 -- ============================================================
 
@@ -30,15 +32,6 @@ CREATE TABLE IF NOT EXISTS named_visitors (
   name       text UNIQUE NOT NULL,               -- visitor display name (unique)
   created_at timestamp with time zone DEFAULT now()
 );
--- Step 1: Enable RLS on the existing table
-ALTER TABLE named_visitors ENABLE ROW LEVEL SECURITY;
-
--- Step 2: Add the policies
-CREATE POLICY "Allow public read"
-  ON named_visitors FOR SELECT USING (true);
-
-CREATE POLICY "Allow public insert"
-  ON named_visitors FOR INSERT WITH CHECK (true);
 
 
 -- ────────────────────────────────────────────────────────────
@@ -58,30 +51,30 @@ ALTER TABLE articles        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE named_visitors  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_profiles   ENABLE ROW LEVEL SECURITY;
 
--- Articles: fully public (read + write for backend service)
+-- Articles: public read only (the backend writes with the service-role key)
+DROP POLICY IF EXISTS "Articles: public read" ON articles;
 CREATE POLICY "Articles: public read"
   ON articles FOR SELECT USING (true);
 
-CREATE POLICY "Articles: public insert"
-  ON articles FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Articles: public update"
-  ON articles FOR UPDATE USING (true);
-
--- Named Visitors: fully public (name-only login, no auth.users)
+-- Named Visitors: public read + insert (name-only login, no auth.users)
+DROP POLICY IF EXISTS "Named visitors: public read" ON named_visitors;
 CREATE POLICY "Named visitors: public read"
   ON named_visitors FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Named visitors: public insert" ON named_visitors;
 CREATE POLICY "Named visitors: public insert"
   ON named_visitors FOR INSERT WITH CHECK (true);
 
 -- User Profiles: scoped to authenticated user
+DROP POLICY IF EXISTS "Profiles: user can insert own row" ON user_profiles;
 CREATE POLICY "Profiles: user can insert own row"
   ON user_profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Profiles: user can view own row" ON user_profiles;
 CREATE POLICY "Profiles: user can view own row"
   ON user_profiles FOR SELECT USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Profiles: user can update own row" ON user_profiles;
 CREATE POLICY "Profiles: user can update own row"
   ON user_profiles FOR UPDATE USING (auth.uid() = id);
 
