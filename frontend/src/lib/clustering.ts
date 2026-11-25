@@ -28,6 +28,8 @@ export const MAX_GAP_HOURS = 36;
 
 function tokens(text: string): string[] {
     return text
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '') // fold accents: Ábrego -> Abrego
         .toLowerCase()
         .replace(/[’']s\b/g, '')
         .replace(/[^a-z0-9\s-]/g, ' ')

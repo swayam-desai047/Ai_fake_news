@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -31,7 +32,9 @@ MIN_PUBLISHERS = 2
 
 
 def tokens(text: str) -> List[str]:
-    text = re.sub(r"[’']s\b", "", (text or "").lower())
+    # Accents are folded (Ábrego -> abrego) so spellings with and without diacritics match.
+    text = "".join(c for c in unicodedata.normalize("NFKD", text or "") if not unicodedata.combining(c))
+    text = re.sub(r"[’']s\b", "", text.lower())
     text = re.sub(r"[^a-z0-9\s-]", " ", text)
     out = []
     for t in re.split(r"\s+", text):

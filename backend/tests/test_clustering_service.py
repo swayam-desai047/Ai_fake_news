@@ -50,3 +50,11 @@ def test_old_articles_outside_window_ignored_and_ungrouped_cleared():
 
 def test_insufficient_articles():
     assert cluster_articles([row("1", "BBC", "Lonely story")], NOW) == []
+
+
+def test_accented_and_plain_spellings_match():
+    groups = cluster_articles([
+        row("1", "BBC", "Kilmar Ábrego García leaving US for Spain, ending Trump deportation battle"),
+        row("2", "AlJazeera", "Kilmar Abrego Garcia self-deports to Spain after lengthy US legal battle"),
+    ], NOW)
+    assert len(groups) == 1
