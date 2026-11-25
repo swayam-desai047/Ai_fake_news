@@ -76,7 +76,9 @@ export default function ExternalResults({ q, since, autoRun }: { q: string; sinc
 }
 
 function ExternalBody({ response, retry }: { response: ExternalSearchResponse; retry: () => void }) {
-    const providerNote = response.provider === 'Google News'
+    const providerNote = response.provider === 'Bing News'
+        ? 'Source: Bing News search (publisher descriptions and photos).'
+        : response.provider === 'Google News'
         ? 'Source: Live Global News API (real-time reports across original world publishers).'
         : response.provider === 'GDELT'
         ? 'Source: GDELT DOC 2.0 API.'

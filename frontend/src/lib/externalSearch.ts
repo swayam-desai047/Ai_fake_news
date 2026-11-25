@@ -25,14 +25,14 @@ export interface ExternalResult {
     publishedAt: string | null;
     imageUrl: string | null;
     description: string | null;
-    provider: 'Google News' | 'GNews' | 'GDELT';
+    provider: 'Bing News' | 'Google News' | 'GNews' | 'GDELT';
     /** True when enough publisher text was supplied to run the analysis; the article page can then open it. */
     analysed: boolean;
 }
 
 export interface ExternalSearchResponse {
     status: ExternalStatus;
-    provider: 'Google News' | 'GNews' | 'GDELT';
+    provider: 'Bing News' | 'Google News' | 'GNews' | 'GDELT';
     results: ExternalResult[];
     message?: string;
     /** How to enable a dedicated provider, shown when the keyless fallback is struggling. */
@@ -44,7 +44,7 @@ export const GNEWS_HINT =
 
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const GDELT_MIN_GAP_MS = 5500;
-const MAX_RESULTS = 12;
+const MAX_RESULTS = 20;
 
 declare global {
      
@@ -61,6 +61,74 @@ const analysedArticles = (globalThis.__analysedArticles =
 
 let gdeltQueue: Promise<unknown> = Promise.resolve();
 let gdeltLast = 0;
+
+/** Keeps an external article that a results page links to, so /article/<id> can open it. */
+export function rememberExternalArticle(article: Article): void {
+    analysedArticles.set(article.id, { at: Date.now(), article });
+}
+
+const enriched = new Set<string>();
+
+/**
+ * Opening an external report: read the publisher page once for its photo (og:image) and opening
+ * paragraphs, so the article page shows a summary rather than a bare headline. Google News redirect
+ * links cannot be read server-side and are left as they are.
+ */
+export async function enrichExternalArticle(article: Article): Promise<Article> {
+    let url = article.sourceUrl;
+    if (!url || enriched.has(article.id)) return article;
+    enriched.add(article.id);
+    try {
+        let gdeltImage: string | null = null;
+        if (/(^|\.)news\.google\.com$/.test(new URL(url).hostname)) {
+            // Google News links are JS redirects: find the same headline in GDELT for the publisher URL.
+            const want = normalise(article.title);
+            const found = await Promise.race([
+                searchGdelt(parseQuery(article.title.split(/\s+/).slice(0, 10).join(' ')))
+                    .then(r => r.results.find(x => normalise(x.title) === want || normalise(x.title).startsWith(want.slice(0, 40)))),
+                new Promise<undefined>(r => setTimeout(() => r(undefined), 12000)),
+            ]).catch(() => undefined);
+            if (!found) return article;
+            url = found.url;
+            gdeltImage = found.imageUrl;
+        }
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', Accept: 'text/html' },
+            signal: AbortSignal.timeout(8000),
+            cache: 'no-store',
+        });
+        if (!res.ok || !(res.headers.get('content-type') ?? '').includes('html')) return article;
+        const html = (await res.text()).slice(0, 600_000);
+        const meta = (name: string) =>
+            html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]*content=["']([^"']+)["']`, 'i'))?.[1] ??
+            html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']${name}["']`, 'i'))?.[1];
+        const image = meta('og:image') ?? meta('twitter:image');
+        const description = cleanText(meta('og:description') ?? meta('description'));
+        const paragraphs = [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+            .map(m => cleanText(m[1]))
+            .filter(p => p.length >= 80 && !/cookie|subscribe|sign up|newsletter|javascript/i.test(p));
+        // shortcut: first paragraphs only (a summary, not the full article); a real extractor would pick the body.
+        let text = '';
+        for (const p of [description, ...paragraphs]) {
+            if (!p || text.includes(p.slice(0, 60))) continue;
+            if (text.length + p.length > 1500) break;
+            text += (text ? ' ' : '') + p;
+        }
+        const current = text.length > article.excerpt.length ? text : article.excerpt;
+        const better = {
+            ...toArticle(
+                { id: article.id, title: article.title, publisher: article.publisher, url, publishedAt: article.publishedAt,
+                  imageUrl: article.imageUrl ?? (image ? new URL(image, url).href : gdeltImage), description: current, provider: 'GNews' },
+                current,
+            ),
+            section: article.section,
+        };
+        analysedArticles.set(article.id, { at: Date.now(), article: better });
+        return better;
+    } catch {
+        return article;
+    }
+}
 
 export function getExternalArticle(id: string): Article | null {
     const hit = analysedArticles.get(id);
@@ -246,6 +314,48 @@ function tag(xml: string, name: string): string | undefined {
     return xml.match(re)?.[1];
 }
 
+async function searchBingNews(qRaw: string, parsed: ParsedQuery, since?: string): Promise<ExternalSearchResponse> {
+    const q = qRaw.trim() || booleanQuery(parsed, 1, ' ');
+    if (!q) return { status: 'ok', provider: 'Bing News', results: [] };
+    const params = new URLSearchParams({ q, format: 'rss', setlang: 'en' });
+    const interval = since === '24h' ? '7' : since === '7d' ? '8' : since === '30d' ? '9' : '';
+    if (interval) params.set('qft', `interval="${interval}"`);
+    const res = await fetch(`https://www.bing.com/news/search?${params}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+        signal: AbortSignal.timeout(10000),
+        cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(`Bing News returned HTTP ${res.status}`);
+    const items = (await res.text()).match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
+
+    const results: ExternalResult[] = items.slice(0, 30).flatMap(item => {
+        const title = cleanText(tag(item, 'title') ?? '');
+        const rawLink = cleanText(tag(item, 'link') ?? '');
+        if (!title || !rawLink) return [];
+        let url = rawLink;
+        try {
+            url = new URL(rawLink).searchParams.get('url') || rawLink; // apiclick.aspx?url=<publisher URL>
+        } catch { /* keep raw link */ }
+        const description = cleanText(tag(item, 'description') ?? '');
+        const image = cleanText(tag(item, 'News:Image') ?? '');
+        const pubDateRaw = tag(item, 'pubDate');
+        const base = {
+            id: `ex-${hashId(url)}`,
+            title,
+            publisher: cleanText(tag(item, 'News:Source') ?? '') || publisherFromDomain(new URL(url).hostname),
+            url,
+            publishedAt: pubDateRaw && !Number.isNaN(Date.parse(pubDateRaw)) ? new Date(pubDateRaw).toISOString() : null,
+            imageUrl: image ? image.replace(/^http:/, 'https:') + '&w=800&h=450&c=14' : null,
+            description: description && normalise(description) !== normalise(title) ? description : null,
+            provider: 'Bing News' as const,
+        };
+        const analysed = (base.description ?? '').length >= MIN_EVIDENCE_CHARS;
+        if (analysed) analysedArticles.set(base.id, { at: Date.now(), article: toArticle(base, base.description!) });
+        return [{ ...base, analysed }];
+    });
+    return { status: 'ok', provider: 'Bing News', results };
+}
+
 async function searchGoogleNews(qRaw: string, parsed: ParsedQuery, since?: string): Promise<ExternalSearchResponse> {
     let q = qRaw.trim() || booleanQuery(parsed, 1, ' ');
     if (!q) return { status: 'ok', provider: 'Google News', results: [] };
@@ -284,7 +394,9 @@ async function searchGoogleNews(qRaw: string, parsed: ParsedQuery, since?: strin
         const pubDateRaw = tag(item, 'pubDate');
         const publishedAt = pubDateRaw && !Number.isNaN(Date.parse(pubDateRaw)) ? new Date(pubDateRaw).toISOString() : null;
         const rawDesc = tag(item, 'description') ?? '';
-        const description = cleanText(rawDesc);
+        // Google News descriptions are usually just "<headline> <publisher>": treat that as no description.
+        const description = cleanText(rawDesc).replace(publisher, '').trim();
+        const sameAsTitle = normalise(description) === normalise(title) || normalise(description) === normalise(rawTitle);
 
         const base = {
             id: `ex-${hashId(link || title)}`,
@@ -293,7 +405,7 @@ async function searchGoogleNews(qRaw: string, parsed: ParsedQuery, since?: strin
             url: link,
             publishedAt,
             imageUrl: null,
-            description: description && description !== title ? description : null,
+            description: description && !sameAsTitle ? description : null,
             provider: 'Google News' as const,
         };
 
@@ -310,7 +422,7 @@ async function searchGoogleNews(qRaw: string, parsed: ParsedQuery, since?: strin
 export async function searchExternal(q: string, local: Pick<Article, 'sourceUrl' | 'title'>[], since?: string): Promise<ExternalSearchResponse> {
     const parsed = parseQuery(q);
     const key = process.env.GNEWS_API_KEY?.trim();
-    const provider = key ? 'GNews' : 'Google News';
+    const provider = key ? 'GNews' : 'Bing News';
     const cacheKey = `${provider}:${parsed.phrase}:${since || ''}`;
 
     let response: ExternalSearchResponse;
@@ -322,7 +434,15 @@ export async function searchExternal(q: string, local: Pick<Article, 'sourceUrl'
             if (key) {
                 response = await searchGNews(parsed, key);
             } else {
-                response = await searchGoogleNews(q, parsed, since);
+                // Bing News RSS carries a description, photo and publisher link but sometimes returns only a
+                // few items; Google News (queried in parallel) fills the list up after them.
+                const [bing, google] = await Promise.all([
+                    searchBingNews(q, parsed, since).catch(() => null),
+                    searchGoogleNews(q, parsed, since).catch(() => null),
+                ]);
+                const ok = [bing, google].filter((r): r is ExternalSearchResponse => r?.status === 'ok');
+                if (ok.length === 0) throw new Error('Bing News and Google News unavailable');
+                response = { ...ok[0], results: ok.flatMap(r => r.results) };
                 // An empty Google News answer falls back to GDELT's wider index.
                 if (response.status === 'ok' && response.results.length === 0) response = await searchGdelt(parsed);
             }

@@ -48,3 +48,18 @@ def test_failed_feed_does_not_stop_the_run():
     articles, failed = fetch_articles({"general": {"Good": "https://good/rss", "Bad": "https://bad/rss"}}, client=client)
     assert failed == ["Bad"]
     assert len(articles) == 2
+
+
+def test_parse_feed_picks_widest_image():
+    rss = b"""<?xml version="1.0"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>T</title>
+<item><title>Photo story</title><link>https://ex.com/p</link>
+<media:thumbnail width="240" url="https://ichef.bbci.co.uk/ace/standard/240/cpsprodpb/x.jpg"/>
+<media:content medium="image" width="1200" url="https://ex.com/big.jpg"/></item>
+<item><title>BBC thumb</title><link>https://ex.com/q</link>
+<media:thumbnail width="240" url="https://ichef.bbci.co.uk/ace/standard/240/cpsprodpb/y.jpg"/></item>
+</channel></rss>"""
+    items = parse_feed(rss, "Example", "world")
+    assert items[0]["image_url"] == "https://ex.com/big.jpg"
+    assert items[1]["image_url"] == "https://ichef.bbci.co.uk/ace/standard/976/cpsprodpb/y.jpg"
+    assert parse_feed(RSS, "Example", "world")[0]["image_url"] is None

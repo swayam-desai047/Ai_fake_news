@@ -27,6 +27,8 @@ BASE_COLUMNS = [
 ]
 V2_COLUMNS = ["analysis_status", "analysis_method", "model_version", "analyzed_at", "summary_method",
               "model_fake_probability"]
+# Added by migration 03; dropped on insert (with a warning) until it is applied.
+IMAGE_COLUMNS = ["image_url"]
 
 
 def get_article_by_id(article_id: str) -> Optional[Dict[str, Any]]:
@@ -83,7 +85,7 @@ def existing_keys(client, articles: List[Dict]) -> Tuple[Set[str], Set[str]]:
 def build_record(article: Dict[str, Any], analysis: Dict[str, Any], include_v2: bool = True) -> Dict[str, Any]:
     """Merge a collected article with its analysis into a row; never fills in missing analysis."""
     merged = {**article, **{k: v for k, v in analysis.items() if not k.startswith("_")}}
-    columns = BASE_COLUMNS + (V2_COLUMNS if include_v2 else [])
+    columns = BASE_COLUMNS + IMAGE_COLUMNS + (V2_COLUMNS if include_v2 else [])
     record = {c: merged.get(c) for c in columns if c in merged}
     record.setdefault("category", "general")
     if not record.get("published_at"):
@@ -91,17 +93,24 @@ def build_record(article: Dict[str, Any], analysis: Dict[str, Any], include_v2: 
     return record
 
 
+def _write(record: Dict[str, Any], op: Callable[[Dict[str, Any]], Any]) -> Any:
+    """Run a write; when it fails on a column of an unapplied migration, retry without that column group."""
+    optional = [("02", V2_COLUMNS), ("03", IMAGE_COLUMNS)]
+    while True:
+        try:
+            return op(record)
+        except Exception as exc:
+            hit = next(((m, cols) for m, cols in optional
+                        if any(c in str(exc) and c in record for c in cols)), None)
+            if hit is None:
+                raise
+            logger.warning("Migration %s not applied; storing without columns %s.", hit[0], hit[1])
+            record = {k: v for k, v in record.items() if k not in hit[1]}
+
+
 def _insert(client, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Insert, ignoring a title already present (UNIQUE constraint); falls back to pre-v2 columns."""
-    try:
-        res = client.table("articles").upsert(record, on_conflict="title", ignore_duplicates=True).execute()
-    except Exception as exc:
-        missing_v2 = any(c in str(exc) for c in V2_COLUMNS)
-        if not missing_v2:
-            raise
-        logger.warning("Migration 02 not applied; storing without analysis_status/model_version columns.")
-        legacy = {k: v for k, v in record.items() if k not in V2_COLUMNS}
-        res = client.table("articles").upsert(legacy, on_conflict="title", ignore_duplicates=True).execute()
+    """Insert, ignoring a title already present (UNIQUE constraint); drops columns of unapplied migrations."""
+    res = _write(record, lambda r: client.table("articles").upsert(r, on_conflict="title", ignore_duplicates=True).execute())
     return res.data[0] if res.data else None
 
 
@@ -171,6 +180,6 @@ def reanalyze(ids: Iterable[str], client=None, analyse: Callable[..., Dict[str, 
         row = rows[0]
         analysis = analyse(row["title"], row.get("content_summary") or "", row.get("source_domain") or "")
         update = {k: v for k, v in build_record({}, analysis).items() if k not in ("category",)}
-        client.table("articles").update(update).eq("id", aid).execute()
+        _write(update, lambda r: client.table("articles").update(r).eq("id", aid).execute())
         done += 1
     return done

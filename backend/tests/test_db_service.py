@@ -72,3 +72,29 @@ def test_grouped_articles_have_publisher_coverage(monkeypatch):
     g = db_service.get_grouped_articles()[0]
     assert g["publisher_count"] == 2
     assert [c["publisher"] for c in g["coverage"]] == ["BBC", "CNN"]
+
+
+def test_insert_drops_columns_of_unapplied_migrations():
+    calls = []
+
+    class Table:
+        def upsert(self, record, **_):
+            calls.append(record)
+            self.record = record
+            return self
+
+        def execute(self):
+            for col in ("analysis_status", "image_url"):
+                if col in self.record:
+                    raise RuntimeError(f"Could not find the '{col}' column of 'articles'")
+            from types import SimpleNamespace
+            return SimpleNamespace(data=[self.record])
+
+    class Client:
+        def table(self, _):
+            return Table()
+
+    record = {"title": "T", "analysis_status": "ok", "image_url": "https://ex.com/a.jpg"}
+    saved = db_service._insert(Client(), record)
+    assert saved == {"title": "T"}
+    assert len(calls) == 3

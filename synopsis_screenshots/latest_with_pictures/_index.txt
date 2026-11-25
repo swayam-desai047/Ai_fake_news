@@ -1,0 +1,28 @@
+01_reader_registration_modal.png
+02_reader_registration_filled.png
+03_home_above_fold.png  /  photos=35/35 placeholders=1
+04_home_full.png    photos=35/35 placeholders=1
+05_section_world.png  /section/world  photos=23/23 placeholders=0
+06_section_india.png  /section/india  photos=20/20 placeholders=0
+07_section_politics.png  /section/politics  photos=12/12 placeholders=0
+08_section_business.png  /section/business  photos=11/11 placeholders=0
+09_section_technology.png  /section/technology  photos=7/7 placeholders=0
+10_section_science.png  /section/science  photos=20/20 placeholders=0
+11_section_culture.png  /section/culture  photos=10/10 placeholders=0
+12_section_sports.png  /section/sports  photos=23/23 placeholders=0
+13_article_detail_top.png  /article/8d703d06-c371-4ae0-a3cc-be2ccfbbd5b8  photos=4/4 placeholders=0
+14_article_detail_full.png    photos=4/4 placeholders=0
+15_article_analysis_section.png  /article/8d703d06-c371-4ae0-a3cc-be2ccfbbd5b8#analysis  photos=4/4 placeholders=0
+16_search_empty.png  /search  photos=20/20 placeholders=0
+17_search_query_vaibhav_sooryavanshi.png  /search?q=vaibhav%20sooryavanshi  photos=12/12 placeholders=0
+18_search_query_climate.png  /search?q=climate  photos=12/12 placeholders=0
+19_search_filter_moderate_risk.png  /search?risk=Moderate%20Risk  photos=20/20 placeholders=0
+20_search_filter_technology_newest.png  /search?section=technology&sort=newest  photos=7/7 placeholders=0
+21_search_needs_verification.png  /search?verify=1  photos=20/20 placeholders=0
+22_external_search_article.png  /article/ex-11ijuopy2mv  photos=5/5 placeholders=0
+23_analytics_dashboard.png  /analytics  photos=0/0 placeholders=0
+24_compare_cross_source.png  /compare  photos=7/7 placeholders=0
+25_not_found_page.png  /article/does-not-exist  photos=0/0 placeholders=0
+26_mobile_home.png  /  photos=35/35 placeholders=1
+27_mobile_article.png  /article/8d703d06-c371-4ae0-a3cc-be2ccfbbd5b8  photos=4/4 placeholders=0
+28_mobile_search.png  /search?q=vaibhav%20sooryavanshi  photos=12/12 placeholders=0

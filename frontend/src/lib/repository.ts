@@ -4,7 +4,7 @@ import { clusterArticles } from './clustering';
 import { riskLabelFor, MIN_EVIDENCE_CHARS } from './scoring';
 import { sectionFromCategory, SECTIONS } from './sections';
 import { databaseSearchWords, parseQuery, rankArticles } from './search';
-import { getExternalArticle, searchExternal, toArticle } from './externalSearch';
+import { enrichExternalArticle, getExternalArticle, rememberExternalArticle, searchExternal, toArticle } from './externalSearch';
 import {
     DIMENSION_KEYS,
     type AnalyticsSummary,
@@ -64,6 +64,7 @@ interface ArticleRow {
     model_version?: string | null;
     summary_method?: string | null;
     model_fake_probability?: number | null;
+    image_url?: string | null;
 }
 
 /**
@@ -102,7 +103,7 @@ function normaliseRow(row: ArticleRow): Article {
         title: row.title,
         publisher: row.source_domain?.trim() || 'Unknown publisher',
         sourceUrl: row.source_url || null,
-        imageUrl: null,
+        imageUrl: row.image_url || null,
         excerpt,
         summary: row.ai_summary?.trim() || null,
         // The backend's summaries are extractive (sentences selected from the excerpt).
@@ -132,6 +133,67 @@ function normaliseRow(row: ArticleRow): Article {
 
 let dbCache: { at: number; articles: Article[] } | null = null;
 
+const urlKey = (u: string) => u.split(/[?#]/)[0].replace(/\/$/, '').toLowerCase();
+
+/** Rows stored before migration 03 have no image: borrow the photo the live feed has for the same story. */
+async function withLiveImages(articles: Article[]): Promise<Article[]> {
+    if (articles.every(a => a.imageUrl)) return articles;
+    try {
+        const live = (await getLiveEdition()).articles.filter(a => a.imageUrl);
+        const byUrl = new Map(live.filter(a => a.sourceUrl).map(a => [urlKey(a.sourceUrl!), a.imageUrl]));
+        const byTitle = new Map(live.map(a => [a.title.trim().toLowerCase(), a.imageUrl]));
+        articles = articles.map(a => a.imageUrl ? a : {
+            ...a,
+            imageUrl: (a.sourceUrl && byUrl.get(urlKey(a.sourceUrl))) || byTitle.get(a.title.trim().toLowerCase()) || null,
+        });
+    } catch {
+        /* live feed unavailable: try the publisher pages below */
+    }
+    return withPageImages(articles);
+}
+
+declare global {
+    var __ogImages: Map<string, string | null> | undefined;
+}
+const ogImages = (globalThis.__ogImages ??= new Map<string, string | null>());
+
+/** og:image of a publisher page (cached, null when the page can't be read). */
+async function pageImage(url: string): Promise<string | null> {
+    if (ogImages.has(url)) return ogImages.get(url)!;
+    let image: string | null = null;
+    try {
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+            signal: AbortSignal.timeout(10000),
+            cache: 'no-store',
+        });
+        if (res.ok) {
+            const head = (await res.text()).slice(0, 200_000);
+            const m = head.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]*content=["']([^"']+)["']/i)
+                ?? head.match(/<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["'](?:og:image|twitter:image)["']/i);
+            if (m) image = new URL(m[1].replace(/&amp;/g, '&'), url).href;
+        }
+    } catch {
+        /* unreachable page: no image */
+    }
+    ogImages.set(url, image);
+    if (!image) setTimeout(() => ogImages.delete(url), 2 * 60_000); // retry a failed page later
+    return image;
+}
+
+/**
+ * Stories that left the live feed: read the photo from the publisher page. Waits at most 6 s per
+ * page load; slower pages keep loading in the background and appear on the next refresh.
+ */
+async function withPageImages(articles: Article[]): Promise<Article[]> {
+    const todo = [...new Set(articles.filter(a => !a.imageUrl && a.sourceUrl && !ogImages.has(a.sourceUrl)).map(a => a.sourceUrl!))];
+    const job = (async () => {
+        for (let i = 0; i < todo.length; i += 8) await Promise.all(todo.slice(i, i + 8).map(pageImage));
+    })();
+    await Promise.race([job, new Promise(r => setTimeout(r, 6000))]);
+    return articles.map(a => (a.imageUrl || !a.sourceUrl || !ogImages.get(a.sourceUrl) ? a : { ...a, imageUrl: ogImages.get(a.sourceUrl)! }));
+}
+
 async function loadDatabaseArticles(): Promise<Article[] | null> {
     if (!isSupabaseConfigured) return null;
     if (dbCache && Date.now() - dbCache.at < DB_CACHE_MS) return dbCache.articles;
@@ -142,7 +204,7 @@ async function loadDatabaseArticles(): Promise<Article[] | null> {
             .order('published_at', { ascending: false, nullsFirst: false })
             .limit(DB_EDITION_LIMIT);
         if (error || !data || data.length === 0) return null;
-        const articles = (data as ArticleRow[]).map(normaliseRow);
+        const articles = await withLiveImages((data as ArticleRow[]).map(normaliseRow));
         dbCache = { at: Date.now(), articles };
         return articles;
     } catch {
@@ -301,9 +363,12 @@ export async function queryArticles(query: ArticleQuery): Promise<ArticlePage & 
             if (externalResp.status === 'ok' && externalResp.results.length > 0) {
                 const externalArticles: Article[] = [];
                 for (const r of externalResp.results) {
-                    const text = [r.title, r.description].filter(Boolean).join('. ');
-                    const art = getExternalArticle(r.id) ?? toArticle(r, text);
-                    if (art) externalArticles.push(art);
+                    const text = r.description || r.title;
+                    const prev = getExternalArticle(r.id);
+                    // A cached copy may predate the GDELT match: keep its analysis, take the photo and real URL.
+                    const art = prev ? { ...prev, imageUrl: prev.imageUrl ?? r.imageUrl, sourceUrl: r.url } : toArticle(r, text);
+                    rememberExternalArticle(art); // results link to /article/<id>; it must resolve there
+                    externalArticles.push(art);
                 }
                 if (externalArticles.length > 0) {
                     all = [...all, ...externalArticles];
@@ -334,7 +399,7 @@ export async function getArticle(id: string): Promise<{ article: Article; editio
 
     // An externally discovered report that had enough provider text to be analysed.
     const external = id.startsWith('ex-') ? getExternalArticle(id) : null;
-    if (external) return { article: external, edition };
+    if (external) return { article: await enrichExternalArticle(external), edition };
 
     // A database article older than the cached edition window.
     if (isSupabaseConfigured && !id.startsWith('lv-') && !id.startsWith('ex-')) {

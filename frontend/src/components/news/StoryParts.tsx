@@ -80,7 +80,9 @@ export function SectionHeading({ title, href, more = 'More', serif = false, id, 
 /** The text that stands in for a summary: AI summary, or the first paragraph of the publisher excerpt. */
 export function bestSummary(a: Article): string {
     if (a.summaryKind === 'ai' && a.summary) return a.summary;
-    return paragraphs(a.excerpt)[0] ?? '';
+    const first = paragraphs(a.excerpt)[0] ?? '';
+    // Headline-only reports: don't repeat the headline as its own summary.
+    return first.trim().toLowerCase().startsWith(a.title.trim().toLowerCase()) && first.length < a.title.length + 40 ? '' : first;
 }
 
 export function paragraphs(text: string | null | undefined): string[] {

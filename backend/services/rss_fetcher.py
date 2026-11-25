@@ -44,6 +44,20 @@ RSS_SOURCES: Dict[str, Dict[str, str]] = {
         "CNN": "http://rss.cnn.com/rss/edition_world.rss",
         "AlJazeera": "https://www.aljazeera.com/xml/rss/all.xml",
     },
+    "india": {
+        "The Hindu": "https://www.thehindu.com/news/national/feeder/default.rss",
+        "Indian Express": "https://indianexpress.com/section/india/feed/",
+        "Times of India": "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms",
+    },
+    "science": {
+        "The Guardian Science": "https://www.theguardian.com/science/rss",
+        "ScienceDaily": "https://www.sciencedaily.com/rss/top/science.xml",
+        "NASA": "https://www.nasa.gov/news-release/feed/",
+    },
+    "culture": {
+        "The Guardian Culture": "https://www.theguardian.com/uk/culture/rss",
+        "Indian Express Entertainment": "https://indianexpress.com/section/entertainment/feed/",
+    },
 }
 
 ENTRIES_PER_SOURCE = 8
@@ -83,6 +97,24 @@ def entry_published_at(entry) -> Optional[str]:
         return None
 
 
+def entry_image(entry) -> Optional[str]:
+    """Widest image from media:content / media:thumbnail / image enclosures, or None."""
+    candidates = []
+    for item in (entry.get("media_content") or []) + (entry.get("media_thumbnail") or []):
+        url = item.get("url")
+        kind = item.get("type") or item.get("medium") or "image"
+        if url and ("image" in kind or re.search(r"\.(jpe?g|png|webp)", url, re.I)):
+            candidates.append((int(item.get("width") or 0), url))
+    for enc in entry.get("enclosures") or []:
+        if enc.get("href") and "image" in (enc.get("type") or ""):
+            candidates.append((0, enc["href"]))
+    if not candidates:
+        return None
+    url = max(candidates, key=lambda c: c[0])[1]
+    # BBC feeds publish 240px thumbnails; the same asset is served at larger standard widths.
+    return re.sub(r"(ichef\.bbci\.co\.uk/(?:ace|news)/(?:standard|ws))/\d+/", r"\1/976/", url)
+
+
 def parse_feed(content: bytes, source_domain: str, category: str, limit: int = ENTRIES_PER_SOURCE) -> List[Dict]:
     """Parse one feed document into normalised article dicts."""
     feed = feedparser.parse(content)
@@ -102,6 +134,7 @@ def parse_feed(content: bytes, source_domain: str, category: str, limit: int = E
             "content_summary": excerpt if excerpt != title else "",
             "category": category,
             "published_at": entry_published_at(entry),
+            "image_url": entry_image(entry),
         })
     return out
 

@@ -7,7 +7,7 @@ from services.dimension_service import (
     DIMENSION_KEYS, analyse_text, risk_label_for, rule_risk, sentiment_from_score,
 )
 
-VECTORS = json.loads((Path(__file__).resolve().parents[2] / "shared" / "scoring_vectors.json").read_text())
+VECTORS = json.loads((Path(__file__).resolve().parents[2] / "shared" / "scoring_vectors.json").read_text(encoding="utf-8"))
 
 
 def _camel_to_backend(expected):

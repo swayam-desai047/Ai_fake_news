@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS articles (
   model_version          text,
   analyzed_at            timestamptz,
   summary_method         text,              -- extractive
-  model_fake_probability real               -- raw classifier fake-class score
+  model_fake_probability real,              -- raw classifier fake-class score
+  image_url              text               -- feed-supplied story photo
 );
 
 -- Ensure upgrade columns exist if the table was previously created
@@ -59,7 +60,8 @@ ALTER TABLE articles
   ADD COLUMN IF NOT EXISTS model_version TEXT,
   ADD COLUMN IF NOT EXISTS analyzed_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS summary_method TEXT,
-  ADD COLUMN IF NOT EXISTS model_fake_probability REAL;
+  ADD COLUMN IF NOT EXISTS model_fake_probability REAL,
+  ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE articles ALTER COLUMN credibility_label DROP DEFAULT;
 
 -- ────────────────────────────────────────────────────────────
