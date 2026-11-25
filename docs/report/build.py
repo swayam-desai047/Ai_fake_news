@@ -63,7 +63,7 @@ li { margin-bottom: 2pt; text-align: justify; }
 table { border-collapse: collapse; width: 100%; table-layout: auto; margin: 4pt 0 12pt; font-size: 11pt; line-height: 1.3; break-inside: auto; }
 table.small { font-size: 10pt; }
 caption { font-weight: bold; margin-bottom: 4pt; caption-side: top; text-align: center; }
-th, td { border: 1px solid #000; padding: 2pt 4pt; overflow-wrap: anywhere; vertical-align: top; text-align: left; }
+th, td { border: 1px solid #000; padding: 2pt 4pt; overflow-wrap: break-word; vertical-align: top; text-align: left; }
 th { background: #eee; }
 tr { break-inside: avoid; }
 figure { margin: 8pt 0 12pt; text-align: center; break-inside: avoid; }

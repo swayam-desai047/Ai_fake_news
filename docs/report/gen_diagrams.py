@@ -1,22 +1,50 @@
-"""Generates the UML / design diagrams of the project report as SVG files (docs/report/diagrams/)."""
+"""Generates the UML / design diagrams of the project report as SVG files (docs/report/diagrams/).
+
+Conventions (UML 2): classes/objects in compartments, object names underlined, composition = filled
+diamond at the whole, dependency = dashed line with open arrow, synchronous message = solid line with
+filled arrowhead, return = dashed line with open arrowhead, activation bars on lifelines, activity
+decisions/merges as diamonds, loops drawn back into a merge node.
+"""
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 OUT = Path(__file__).parent / "diagrams"
 OUT.mkdir(exist_ok=True)
-FONT = "font-family='Times New Roman, serif'"
+FONT = "font-family='Liberation Serif, Times New Roman, serif'"
 INK = "#111"
-FILL = "#f4f4f4"
+FILL = "#f2f2f2"
+LH = 15
+
+
+class Box:
+    def __init__(self, x, y, w, h):
+        self.x, self.y, self.w, self.h = x, y, w, h
+
+    @property
+    def cx(self): return self.x + self.w / 2
+    @property
+    def cy(self): return self.y + self.h / 2
+    @property
+    def top(self): return self.y
+    @property
+    def bottom(self): return self.y + self.h
+    @property
+    def left(self): return self.x
+    @property
+    def right(self): return self.x + self.w
 
 
 class SVG:
     def __init__(self, w, h):
         self.w, self.h, self.items = w, h, []
 
-    def add(self, s):
-        self.items.append(s)
+    def add(self, s): self.items.append(s)
 
-    def text(self, x, y, s, size=12, anchor="middle", weight="normal", style="normal", under=False):
+    def text(self, x, y, s, size=12, anchor="middle", weight="normal", style="normal", under=False, bg=False):
+        if bg:
+            tw = len(s) * size * 0.47
+            x0 = x - tw / 2 if anchor == "middle" else (x if anchor == "start" else x - tw)
+            self.add(f"<rect x='{x0 - 3}' y='{y - size + 1}' width='{tw + 6}' height='{size + 3}' fill='white'/>")
         deco = " text-decoration='underline'" if under else ""
         self.add(f"<text x='{x}' y='{y}' font-size='{size}' text-anchor='{anchor}' font-weight='{weight}' "
                  f"font-style='{style}'{deco} {FONT} fill='{INK}'>{escape(s)}</text>")
@@ -24,19 +52,17 @@ class SVG:
     def rect(self, x, y, w, h, r=0, fill=FILL, dash=False, sw=1.2):
         d = " stroke-dasharray='5 3'" if dash else ""
         self.add(f"<rect x='{x}' y='{y}' width='{w}' height='{h}' rx='{r}' fill='{fill}' stroke='{INK}' stroke-width='{sw}'{d}/>")
+        return Box(x, y, w, h)
 
-    def line(self, x1, y1, x2, y2, dash=False, arrow=True, sw=1.2, head="open"):
-        d = " stroke-dasharray='5 3'" if dash else ""
-        m = f" marker-end='url(#{head})'" if arrow else ""
-        self.add(f"<line x1='{x1}' y1='{y1}' x2='{x2}' y2='{y2}' stroke='{INK}' stroke-width='{sw}'{d}{m}/>")
-
-    def poly(self, pts, arrow=True, dash=False):
-        d = " stroke-dasharray='5 3'" if dash else ""
-        m = " marker-end='url(#open)'" if arrow else ""
+    def path(self, pts, dash=False, end=None, start=None, sw=1.2):
+        d = " stroke-dasharray='6 4'" if dash else ""
+        m = (f" marker-end='url(#{end})'" if end else "") + (f" marker-start='url(#{start})'" if start else "")
         p = " ".join(f"{x},{y}" for x, y in pts)
-        self.add(f"<polyline points='{p}' fill='none' stroke='{INK}' stroke-width='1.2'{d}{m}/>")
+        self.add(f"<polyline points='{p}' fill='none' stroke='{INK}' stroke-width='{sw}'{d}{m}/>")
 
-    def ellipse(self, cx, cy, rx, ry, label, size=11):
+    def line(self, x1, y1, x2, y2, **kw): self.path([(x1, y1), (x2, y2)], **kw)
+
+    def ellipse(self, cx, cy, rx, ry, label, size=11.5):
         self.add(f"<ellipse cx='{cx}' cy='{cy}' rx='{rx}' ry='{ry}' fill='{FILL}' stroke='{INK}' stroke-width='1.2'/>")
         lines = label.split("\n")
         for i, l in enumerate(lines):
@@ -44,57 +70,65 @@ class SVG:
 
     def actor(self, x, y, name):
         self.add(f"<circle cx='{x}' cy='{y}' r='11' fill='white' stroke='{INK}' stroke-width='1.3'/>")
-        self.line(x, y + 11, x, y + 42, arrow=False, sw=1.3)
-        self.line(x - 18, y + 22, x + 18, y + 22, arrow=False, sw=1.3)
-        self.line(x, y + 42, x - 15, y + 64, arrow=False, sw=1.3)
-        self.line(x, y + 42, x + 15, y + 64, arrow=False, sw=1.3)
-        for i, part in enumerate(name.split("\n")):
+        self.line(x, y + 11, x, y + 42, sw=1.3)
+        self.line(x - 18, y + 22, x + 18, y + 22, sw=1.3)
+        self.line(x, y + 42, x - 15, y + 64, sw=1.3)
+        self.line(x, y + 42, x + 15, y + 64, sw=1.3)
+        for i, part in enumerate([p for p in name.split("\n") if p]):
             self.text(x, y + 82 + i * 14, part, 12, weight="bold")
+        return x, y + 22
 
-    def diamond(self, cx, cy, w, h, label, size=11):
-        pts = f"{cx},{cy-h/2} {cx+w/2},{cy} {cx},{cy+h/2} {cx-w/2},{cy}"
+    def diamond(self, cx, cy, w, h, label="", size=11):
+        pts = f"{cx},{cy - h / 2} {cx + w / 2},{cy} {cx},{cy + h / 2} {cx - w / 2},{cy}"
         self.add(f"<polygon points='{pts}' fill='{FILL}' stroke='{INK}' stroke-width='1.2'/>")
-        lines = label.split("\n")
+        lines = [l for l in label.split("\n") if l]
         for i, l in enumerate(lines):
             self.text(cx, cy + 4 + (i - (len(lines) - 1) / 2) * 13, l, size)
+        return Box(cx - w / 2, cy - h / 2, w, h)
 
-    def uml_box(self, x, y, w, title, attrs, ops=(), obj=False, title_size=13, size=11):
-        lh = 15
-        h1 = 24
-        h2 = max(1, len(attrs)) * lh + 8
-        h3 = (len(ops) * lh + 8) if ops else (0 if obj else 10)
+    def uml(self, x, y, w, title, attrs, ops=None, obj=False, size=11):
+        h1, h2 = 24, max(1, len(attrs)) * LH + 8
+        h3 = 0 if obj else (len(ops or []) * LH + 8 if ops else 10)
         self.rect(x, y, w, h1 + h2 + h3, fill="white", sw=1.3)
         self.rect(x, y, w, h1, fill=FILL, sw=1.3)
-        self.text(x + w / 2, y + 16, title, title_size, weight="bold", under=obj)
-        self.line(x, y + h1 + h2, x + w, y + h1 + h2, arrow=False) if (ops or not obj) else None
+        self.text(x + w / 2, y + 16, title, 12.5, weight="bold", under=obj)
         for i, a in enumerate(attrs):
-            self.text(x + 8, y + h1 + 15 + i * lh, a, size, anchor="start")
-        for i, o in enumerate(ops):
-            self.text(x + 8, y + h1 + h2 + 15 + i * lh, o, size, anchor="start")
-        return h1 + h2 + h3
+            self.text(x + 7, y + h1 + 15 + i * LH, a, size, anchor="start")
+        if not obj:
+            self.line(x, y + h1 + h2, x + w, y + h1 + h2)
+            for i, o in enumerate(ops or []):
+                self.text(x + 7, y + h1 + h2 + 15 + i * LH, o, size, anchor="start")
+        return Box(x, y, w, h1 + h2 + h3)
+
+    def action(self, cx, y, label, w=300, h=34):
+        b = self.rect(cx - w / 2, y, w, h, r=15)
+        self.text(cx, y + h / 2 + 4, label, 12)
+        return b
 
     def save(self, name):
-        defs = (f"<defs><marker id='open' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='8' markerHeight='8' orient='auto-start-reverse'>"
-                f"<path d='M0,0 L10,5 L0,10' fill='none' stroke='{INK}' stroke-width='1.4'/></marker>"
-                f"<marker id='solid' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='8' markerHeight='8' orient='auto-start-reverse'>"
-                f"<path d='M0,0 L10,5 L0,10 z' fill='{INK}'/></marker>"
-                f"<marker id='tri' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='11' markerHeight='11' orient='auto-start-reverse'>"
-                f"<path d='M0,0 L10,5 L0,10 z' fill='white' stroke='{INK}'/></marker></defs>")
+        defs = (
+            "<defs>"
+            f"<marker id='open' viewBox='0 0 10 10' refX='10' refY='5' markerWidth='9' markerHeight='9' orient='auto-start-reverse'>"
+            f"<path d='M0,0 L10,5 L0,10' fill='none' stroke='{INK}' stroke-width='1.3'/></marker>"
+            f"<marker id='solid' viewBox='0 0 10 10' refX='10' refY='5' markerWidth='8' markerHeight='8' orient='auto-start-reverse'>"
+            f"<path d='M0,0 L10,5 L0,10 z' fill='{INK}'/></marker>"
+            f"<marker id='diamond' viewBox='0 0 16 10' refX='16' refY='5' markerWidth='16' markerHeight='10' markerUnits='userSpaceOnUse' orient='auto-start-reverse'>"
+            f"<path d='M0,5 L8,0 L16,5 L8,10 z' fill='{INK}'/></marker>"
+            "</defs>")
         svg = (f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {self.w} {self.h}' width='{self.w}' height='{self.h}'>"
                f"{defs}<rect width='100%' height='100%' fill='white'/>{''.join(self.items)}</svg>")
         (OUT / f"{name}.svg").write_text(svg, encoding="utf-8")
 
 
-# ── System architecture ─────────────────────────────────────────────────────────────────────
 def architecture():
     s = SVG(760, 430)
     layers = [
         ("Data source", "Public RSS feeds (BBC, CNN, Al Jazeera, Yahoo)"),
         ("Collection", "rss_fetcher.py · scheduler.py (APScheduler, every 30 min)"),
-        ("Analysis", "analysis_pipeline.py → dimension_service · ai_service · summary · clustering"),
+        ("Analysis", "analysis_pipeline.py → dimension_service · ai_service · summary"),
         ("Storage", "Supabase / PostgreSQL — articles, named_visitors (RLS)"),
         ("API", "FastAPI router.py (/api/...) · report_service.py (PDF)"),
-        ("Presentation", "Next.js + React + Tailwind + Recharts (pages, search, analytics, PDF)"),
+        ("Presentation", "Next.js + React + Tailwind + Recharts (read-only Supabase key)"),
     ]
     for i, (name, desc) in enumerate(layers):
         y = 20 + i * 68
@@ -103,168 +137,197 @@ def architecture():
         s.rect(200, y, 540, 46, r=6, fill="white")
         s.text(470, y + 28, desc, 13)
         if i < len(layers) - 1:
-            s.line(95, y + 46, 95, y + 68)
+            s.line(95, y + 46, 95, y + 68, end="solid")
     s.save("architecture")
 
 
-# ── 3.1 Object diagram ───────────────────────────────────────────────────────────────────────
 def object_diagram():
-    s = SVG(780, 470)
-    s.uml_box(20, 20, 230, "bbc : Source", ["name = \"BBC\"", "category = \"general\"",
-                                            "reputation = 93 (reference table)"], obj=True)
-    s.uml_box(275, 20, 250, "a1 : Article", ["title = \"Huawei found guilty of", "   stealing trade secrets...\"",
-                                             "publishedAt = 2026-11-25 02:59 UTC", "excerpt = 52 characters",
-                                             "groupId = ev-d73d…"], obj=True)
-    s.uml_box(550, 20, 210, "c1 : CredibilityResult", ["riskScore = 0.15", "label = \"Low Risk\"",
-                                                       "classifierFakeScore = null", "needsVerification = true",
-                                                       "status = \"partial\""], obj=True)
-    s.uml_box(20, 215, 230, "g1 : ArticleGroup", ["groupId = \"ev-d73d…\"", "publishers = [BBC, AlJazeera]",
-                                                  "size = 2"], obj=True)
-    s.uml_box(275, 245, 250, "d1 : DimensionAnalysis", ["sentiment = 50   bias = 84", "objectivity = 92   readability = 66",
-                                                        "propaganda = 95   headline = 45", "sourceCredibility = 93",
-                                                        "contentQuality = 44"], obj=True)
-    s.uml_box(550, 215, 210, "s1 : SentimentResult", ["label = \"neutral\"", "score = 50 (rules)"], obj=True)
-    s.uml_box(550, 330, 210, "r1 : Report", ["format = A4 PDF", "source = GET /api/report/{id}"], obj=True)
-    s.line(250, 60, 275, 60, arrow=False)
-    s.line(525, 70, 550, 70, arrow=False)
-    s.line(140, 215, 300, 135, arrow=False)
-    s.line(400, 140, 400, 245, arrow=False)
-    s.line(525, 140, 600, 215, arrow=False)
-    s.line(500, 140, 600, 330, arrow=False)
-    s.text(390, 455, "Values are taken from an article processed by the implemented pipeline (models not loaded: status partial).", 11, style="italic")
+    s = SVG(820, 480)
+    src = s.uml(20, 30, 220, "bbc : Source", ['name = "BBC"', 'category = "general"', "reputation = 93"], obj=True)
+    art = s.uml(300, 30, 230, "a1 : Article", ['title = "Huawei found guilty of', '   stealing trade secrets..."',
+                                              "publishedAt = 2026-11-25 02:59 UTC", "excerptLength = 52 chars",
+                                              'groupId = "ev-d73d8a5a…"'], obj=True)
+    a2 = s.uml(590, 30, 210, "a2 : Article", ['title = "China’s Huawei found', '   guilty of trade secrets..."',
+                                             'publisher = "AlJazeera"', 'groupId = "ev-d73d8a5a…"'], obj=True)
+    grp = s.uml(590, 210, 210, "g1 : ArticleGroup", ['groupId = "ev-d73d8a5a…"', "publishers = [BBC, AlJazeera]"], obj=True)
+    cred = s.uml(20, 290, 230, "c1 : CredibilityResult", ["riskScore = 0.15", 'label = "Low Risk"',
+                                                         "classifierFakeScore = null", "needsVerification = true",
+                                                         'status = "partial"'], obj=True)
+    dim = s.uml(300, 290, 230, "d1 : DimensionAnalysis", ["sentiment = 50, bias = 84", "objectivity = 92, readability = 66",
+                                                         "propaganda = 95, headline = 45", "sourceCredibility = 93",
+                                                         "contentQuality = 44"], obj=True)
+    sen = s.uml(590, 350, 210, "s1 : SentimentResult", ['label = "neutral"', "score = 50 (rules)"], obj=True)
+    s.line(src.right, src.y + 45, art.left, src.y + 45)
+    s.line(art.right, art.y + 45, a2.left, art.y + 45)
+    s.line(a2.cx, a2.bottom, grp.cx, grp.top)
+    s.path([(art.right, art.y + 95), (565, art.y + 95), (565, grp.cy), (grp.left, grp.cy)])
+    bus = art.bottom + 45
+    s.path([(art.x + 40, art.bottom), (art.x + 40, bus), (cred.cx, bus), (cred.cx, cred.top)])
+    s.line(art.x + 115, art.bottom, art.x + 115, dim.top)
+    s.path([(art.x + 200, art.bottom), (art.x + 200, art.bottom + 30), (550, art.bottom + 30), (550, sen.cy), (sen.left, sen.cy)])
+    s.text(410, 468, "Snapshot of one article processed by the implemented pipeline (models not installed: status partial).", 11, style="italic")
     s.save("object")
 
 
-# ── 3.2 Class diagram ────────────────────────────────────────────────────────────────────────
 def class_diagram():
-    s = SVG(800, 600)
-    s.uml_box(20, 20, 220, "Source", ["- name : String", "- feedUrl : String", "- category : String"],
-              ["+ fetchArticles() : List<Article>"])
-    s.uml_box(290, 20, 230, "Article", ["- id : UUID", "- title : String (unique)", "- sourceUrl : String",
-                                        "- excerpt : String", "- category : String", "- publishedAt : DateTime"],
-              ["+ analyse() : AnalysisResult", "+ toReport() : Report"])
-    s.uml_box(570, 20, 210, "CredibilityResult", ["- riskScore : float | null", "- label : RiskLabel | null",
-                                                  "- classifierFakeScore : float | null",
-                                                  "- classifierConfidence : float | null",
-                                                  "- needsVerification : bool", "- status : String"])
-    s.uml_box(570, 215, 210, "SentimentResult", ["- label : pos | neu | neg", "- score : int (0-100)"])
-    s.uml_box(570, 320, 210, "Summary", ["- text : String", "- method : \"extractive\""])
-    s.uml_box(250, 300, 290, "DimensionAnalysis", ["- sentiment : int | null", "- bias : int | null",
-                                                   "- objectivity : int | null", "- readability : int | null",
-                                                   "- propaganda : int | null", "- headlineAccuracy : int | null",
-                                                   "- sourceCredibility : int | null", "- contentQuality : int | null",
-                                                   "- explanations : Map<String,String>"],
-              ["+ ruleRisk() : float | null"])
-    s.uml_box(20, 230, 200, "ArticleGroup", ["- groupId : String", "- eventTitle : String", "- publishers : List"],
-              ["+ addArticle(a : Article)"])
-    s.uml_box(20, 420, 200, "Report", ["- articleId : UUID", "- generatedAt : DateTime"], ["+ generatePDF() : bytes"])
-    # associations
-    s.line(240, 60, 290, 60, arrow=False); s.text(250, 54, "1", 11); s.text(280, 54, "*", 11)
-    s.line(520, 60, 570, 60, arrow=False); s.text(530, 54, "1", 11); s.text(560, 54, "1", 11)
-    s.line(520, 140, 570, 240, arrow=False); s.text(560, 232, "1", 11)
-    s.line(500, 170, 600, 320, arrow=False); s.text(590, 312, "0..1", 11)
-    s.line(400, 170, 400, 300, arrow=False); s.text(410, 292, "1", 11)
-    s.line(290, 150, 220, 250, arrow=False); s.text(282, 165, "*", 11); s.text(228, 245, "0..1", 11)
-    s.line(300, 170, 200, 420, arrow=False, dash=True)
-    s.text(230, 380, "«uses»", 11, style="italic")
+    s = SVG(900, 610)
+    src = s.uml(20, 20, 210, "Source", ["- name : String", "- feedUrl : String", "- category : String"],
+                ["+ fetch_articles() : List<Article>"])
+    art = s.uml(330, 20, 240, "Article", ["- id : UUID", "- title : String {unique}", "- sourceUrl : String",
+                                          "- excerpt : String", "- category : String", "- publishedAt : DateTime"],
+                ["+ analyze_article() : void"])
+    grp = s.uml(670, 20, 210, "ArticleGroup", ["- groupId : String", "- eventTitle : String", "- publishers : List<String>"],
+                ["+ cluster_articles() : List"])
+    y2 = 330
+    cred = s.uml(15, y2, 225, "CredibilityResult", ["- riskScore : float [0..1]", "- label : RiskLabel [0..1]",
+                                                    "- classifierFakeScore : float [0..1]", "- classifierConfidence : float [0..1]",
+                                                    "- needsVerification : bool", "- status : String"])
+    dim = s.uml(255, y2, 220, "DimensionAnalysis", ["- sentiment : int [0..1]", "- bias : int [0..1]",
+                                                     "- objectivity : int [0..1]", "- readability : int [0..1]",
+                                                     "- propaganda : int [0..1]", "- headlineAccuracy : int [0..1]",
+                                                     "- sourceCredibility : int [0..1]", "- contentQuality : int [0..1]",
+                                                     "- explanations : Map"], ["+ rule_risk() : float [0..1]"])
+    sen = s.uml(490, y2, 175, "SentimentResult", ["- label : Sentiment", "- score : int"])
+    summ = s.uml(680, y2, 200, "Summary", ["- text : String", "- method : String"])
+    rep = s.uml(680, 470, 200, "Report", ["- articleId : UUID", "- format : A4 PDF"], ["+ build_article_report() : bytes"])
+    yy = src.y + 40
+    s.line(src.right, yy, art.left, yy)
+    s.text(src.right + 8, yy - 6, "1", 11, anchor="start"); s.text(art.left - 8, yy - 6, "0..*", 11, anchor="end")
+    s.text((src.right + art.left) / 2, yy + 16, "publishes", 11, style="italic")
+    s.line(art.right, yy, grp.left, yy)
+    s.text(art.right + 8, yy - 6, "2..*", 11, anchor="start"); s.text(grp.left - 8, yy - 6, "0..1", 11, anchor="end")
+    s.text((art.right + grp.left) / 2, yy + 16, "groups", 11, style="italic")
+    bus = 285
+    s.line(art.cx, art.bottom, art.cx, bus, start="diamond")
+    s.line(cred.cx, bus, summ.cx, bus)
+    for b, mult in ((cred, "1"), (dim, "1"), (sen, "1"), (summ, "0..1")):
+        s.line(b.cx, bus, b.cx, b.top)
+        s.text(b.cx + 6, b.top - 6, mult, 11, anchor="start")
+    s.text(art.cx + 10, art.bottom + 22, "1", 11, anchor="start")
+    s.text(art.cx + 10, bus - 8, "composition", 11, anchor="start", style="italic")
+    s.path([(rep.right - 20, rep.top), (rep.right - 20, 450), (892, 450), (892, art.y + 120), (art.right, art.y + 120)],
+           dash=True, end="open")
+    s.text(850, 444, "«uses»", 11, style="italic", bg=True)
     s.save("class")
 
 
-# ── 3.3 Use case diagram ─────────────────────────────────────────────────────────────────────
 def use_case():
-    s = SVG(760, 640)
-    s.rect(200, 20, 360, 600, fill="white", sw=1.4)
-    s.text(380, 42, "AI-Powered News Aggregator", 14, weight="bold")
+    s = SVG(780, 660)
+    s.rect(210, 20, 360, 620, fill="white", sw=1.4)
+    s.text(390, 44, "AI-Powered News Aggregator", 14, weight="bold")
     sched = ["Collect RSS feeds", "Remove duplicates", "Analyse articles\n(risk, sentiment, 8 dimensions)",
              "Group cross-source events"]
     user = ["Register display name", "View news dashboard", "Search & filter articles", "View article analysis",
             "Compare coverage", "View analytics", "Download PDF report", "Analyse custom text (API)"]
-    ys = []
+    ax, ay = s.actor(690, 120, "Scheduler\n(APScheduler)")
     for i, u in enumerate(sched):
-        y = 80 + i * 52
-        s.ellipse(380, y, 150, 21, u)
-        s.line(650, 150, 532, y, arrow=False)
+        y = 85 + i * 55
+        s.ellipse(390, y, 150, 22, u)
+        s.line(ax - 18, ay, 540, y)
+    rx, ry = s.actor(95, 400, "Reader")
     for i, u in enumerate(user):
-        y = 300 + i * 40
-        s.ellipse(380, y, 140, 17, u)
-        s.line(100, 450, 238, y, arrow=False)
-        ys.append(y)
-    s.actor(100, 380, "Reader")
-    s.actor(650, 90, "Scheduler\n(APScheduler)")
+        y = 320 + i * 40
+        s.ellipse(390, y, 140, 17, u)
+        s.line(rx + 18, ry, 250, y)
     s.save("usecase")
 
 
-# ── 3.4 Sequence diagram ─────────────────────────────────────────────────────────────────────
 def sequence():
-    s = SVG(800, 560)
-    parts = [("Reader", 70), ("Next.js frontend", 250), ("FastAPI backend", 450), ("Supabase DB", 650)]
-    for name, x in parts:
-        s.rect(x - 70, 15, 140, 36, r=6)
-        s.text(x, 38, name, 13, weight="bold")
-        s.line(x, 51, x, 540, dash=True, arrow=False, sw=1)
-    msgs = [
-        (70, 250, "1: open /article/{id}", False),
-        (250, 650, "2: select * from articles where id = {id}", False),
-        (650, 250, "3: article row (scores, risk, dimensions)", True),
-        (250, 70, "4: render article + analysis supplement", True),
-        (70, 450, "5: click Download PDF → GET /api/report/{id}", False),
-        (450, 650, "6: get_article_by_id(id)", False),
-        (650, 450, "7: article row", True),
-        (450, 450, "8: build_article_report() (ReportLab)", False),
-        (450, 70, "9: application/pdf file", True),
-    ]
-    y = 90
-    for x1, x2, label, ret in msgs:
-        if x1 == x2:
-            s.poly([(x1, y - 6), (x1 + 50, y - 6), (x1 + 50, y + 12), (x1 + 4, y + 12)])
-            s.text(x1 + 58, y + 6, label, 11, anchor="start", style="italic")
-        else:
-            s.line(x1, y, x2 - (6 if x2 > x1 else -6), y, dash=ret, head="solid" if not ret else "open")
-            s.text((x1 + x2) / 2, y - 6, label, 11, style="italic")
-        y += 50
+    s = SVG(840, 600)
+    X = {"reader": 70, "next": 270, "api": 490, "db": 710}
+    s.actor(X["reader"], 14, "")
+    s.text(X["reader"], 100, "Reader", 12, weight="bold")
+    for key, name in (("next", "Next.js server"), ("api", "FastAPI backend"), ("db", "Supabase (PostgreSQL)")):
+        s.rect(X[key] - 82, 62, 164, 36, r=4)
+        s.text(X[key], 85, name, 12.5, weight="bold")
+    for x in X.values():
+        s.line(x, 106, x, 585, dash=True, sw=0.9)
+
+    def act(x, y1, y2):
+        s.rect(x - 6, y1, 12, y2 - y1, fill="white", sw=1.1)
+
+    def msg(x1, x2, y, label, ret=False):
+        off = 6 if x2 > x1 else -6
+        s.line(x1 + off, y, x2 - off, y, dash=ret, end="open" if ret else "solid")
+        s.text((x1 + x2) / 2, y - 6, label, 11, style="italic", bg=True)
+
+    act(X["reader"], 120, 570)
+    act(X["next"], 140, 255)
+    act(X["db"], 175, 215)
+    act(X["api"], 315, 545)
+    act(X["db"], 350, 390)
+    msg(X["reader"], X["next"], 140, "1: GET /article/{id}")
+    msg(X["next"], X["db"], 175, "2: select * from articles where id = {id}")
+    msg(X["db"], X["next"], 215, "3: article row", ret=True)
+    msg(X["next"], X["reader"], 250, "4: rendered article page", ret=True)
+    msg(X["reader"], X["api"], 315, "5: GET /api/report/{id}  (Download PDF)")
+    msg(X["api"], X["db"], 350, "6: get_article_by_id(id)")
+    msg(X["db"], X["api"], 390, "7: article row", ret=True)
+    act(X["api"] + 8, 440, 490)
+    s.path([(X["api"] + 6, 425), (X["api"] + 50, 425), (X["api"] + 50, 455), (X["api"] + 14, 455)], end="solid")
+    s.text(X["api"] + 58, 444, "8: build_article_report()", 11, anchor="start", style="italic")
+    msg(X["api"], X["reader"], 540, "9: application/pdf (attachment)", ret=True)
     s.save("sequence")
 
 
-# ── 3.5 Activity diagram ─────────────────────────────────────────────────────────────────────
 def activity():
-    s = SVG(760, 860)
-    cx = 300
-    s.add(f"<circle cx='{cx}' cy='25' r='11' fill='{INK}'/>")
-    s.text(cx + 20, 29, "every 30 minutes (APScheduler)", 11, anchor="start", style="italic")
-    steps = ["Fetch RSS feeds (timeout 15 s)", "Clean HTML, parse date, drop repeats in batch"]
-    y = 55
-    s.line(cx, 36, cx, y)
-    for st in steps:
-        s.rect(cx - 150, y, 300, 36, r=14); s.text(cx, y + 23, st, 12); s.line(cx, y + 36, cx, y + 60); y += 60
-    s.diamond(cx, y + 30, 210, 60, "Feed failed?"); s.line(cx + 105, y + 30, 520, y + 30)
-    s.rect(520, y + 12, 200, 36, r=14); s.text(620, y + 35, "Log + add to failed list", 12)
-    s.text(cx + 120, y + 24, "[yes]", 11, anchor="start")
-    s.line(cx, y + 60, cx, y + 85); y += 85
-    s.diamond(cx, y + 30, 210, 60, "Already stored?\n(title / URL)"); s.line(cx + 105, y + 30, 520, y + 30)
-    s.rect(520, y + 12, 200, 36, r=14); s.text(620, y + 35, "Skip (duplicate)", 12)
-    s.text(cx + 120, y + 24, "[yes]", 11, anchor="start"); s.text(cx + 8, y + 76, "[no]", 11, anchor="start")
-    s.line(cx, y + 60, cx, y + 85); y += 85
-    for st in ["Score 8 dimensions (rules)", "Run classifier + sentiment model (if available)", "Combine risk score, label, summary"]:
-        s.rect(cx - 150, y, 300, 36, r=14); s.text(cx, y + 23, st, 12); s.line(cx, y + 36, cx, y + 60); y += 60
-    s.diamond(cx, y + 30, 230, 64, "Enough evidence?\n(≥ 65 % risk weight)"); s.line(cx + 115, y + 30, 520, y + 30)
-    s.rect(520, y + 12, 220, 36, r=14); s.text(630, y + 35, "Label = not assessed", 12)
-    s.text(cx + 125, y + 24, "[no]", 11, anchor="start"); s.line(cx, y + 62, cx, y + 85)
-    s.poly([(630, y + 48), (630, y + 74), (cx + 6, y + 74)]); y += 85
-    s.diamond(cx, y + 30, 250, 64, "Ambiguous score, short text,\nlow confidence or disagreement?"); s.line(cx + 125, y + 30, 520, y + 30)
-    s.rect(520, y + 12, 220, 36, r=14); s.text(630, y + 35, "Flag Needs Verification", 12)
-    s.text(cx + 135, y + 24, "[yes]", 11, anchor="start")
-    s.line(cx, y + 62, cx, y + 85)
-    s.poly([(630, y + 48), (630, y + 74), (cx + 6, y + 74)]); y += 85
-    for st in ["Store article in Supabase", "Re-group recent articles (TF-IDF)"]:
-        s.rect(cx - 150, y, 300, 36, r=14); s.text(cx, y + 23, st, 12); s.line(cx, y + 36, cx, y + 58); y += 58
-    s.add(f"<circle cx='{cx}' cy='{y + 10}' r='12' fill='white' stroke='{INK}' stroke-width='1.5'/><circle cx='{cx}' cy='{y + 10}' r='7' fill='{INK}'/>")
+    s = SVG(780, 1090)
+    cx, rx = 340, 640
+    W = 290
+
+    def arrow(y1, y2, x=cx):
+        s.line(x, y1, x, y2, end="open")
+
+    s.add(f"<circle cx='{cx}' cy='20' r='10' fill='{INK}'/>")
+    s.text(cx + 18, 24, "triggered every 30 minutes", 11, anchor="start", style="italic")
+    m1 = s.diamond(cx, 65, 26, 26); arrow(30, m1.top)
+    a = s.action(cx, 100, "Download next RSS feed (15 s timeout)", W); arrow(m1.bottom, a.top)
+    d1 = s.diamond(cx, 175, 150, 44, "Request failed?"); arrow(a.bottom, d1.top)
+    b = s.action(rx, d1.cy - 17, "Log failure, record feed name", 220)
+    s.line(d1.right, d1.cy, b.left, d1.cy, end="open"); s.text(d1.right + 8, d1.cy - 6, "[yes]", 11, anchor="start")
+    c = s.action(cx, 230, "Parse entries, clean HTML, ISO date", W); arrow(d1.bottom, c.top)
+    s.text(cx + 8, d1.bottom + 12, "[no]", 11, anchor="start")
+    m2 = s.diamond(cx, 300, 26, 26); arrow(c.bottom, m2.top)
+    s.path([(rx, b.bottom), (rx, m2.cy), (m2.right, m2.cy)], end="open")
+    d2 = s.diamond(cx, 355, 150, 44, "More feeds?"); arrow(m2.bottom, d2.top)
+    s.path([(d2.left, d2.cy), (60, d2.cy), (60, m1.cy), (m1.left, m1.cy)], end="open")
+    s.text(d2.left - 8, d2.cy - 6, "[yes]", 11, anchor="end")
+    e = s.action(cx, 410, "Remove repeats within the batch (title, URL)", W); arrow(d2.bottom, e.top)
+    s.text(cx + 8, d2.bottom + 12, "[no]", 11, anchor="start")
+    m3 = s.diamond(cx, 480, 26, 26); arrow(e.bottom, m3.top)
+    d3 = s.diamond(cx, 535, 170, 44, "Already in database?"); arrow(m3.bottom, d3.top)
+    sk = s.action(rx, d3.cy - 17, "Skip (duplicate)", 220)
+    s.line(d3.right, d3.cy, sk.left, d3.cy, end="open"); s.text(d3.right + 8, d3.cy - 6, "[yes]", 11, anchor="start")
+    f = s.action(cx, 590, "Score 8 dimensions (rules); run models if available", W + 50); arrow(d3.bottom, f.top)
+    s.text(cx + 8, d3.bottom + 12, "[no]", 11, anchor="start")
+    d4 = s.diamond(cx, 668, 210, 54, "Scored dimensions carry\n≥ 65 % of risk weight?"); arrow(f.bottom, d4.top)
+    g1 = s.action(200, 718, "Compute risk; Low / Moderate / High", 250)
+    g2 = s.action(rx - 30, 718, "No score; label = not assessed", 230)
+    s.path([(d4.left, d4.cy), (200, d4.cy), (200, g1.top)], end="open"); s.text(d4.left - 8, d4.cy - 6, "[yes]", 11, anchor="end")
+    s.path([(d4.right, d4.cy), (rx - 30, d4.cy), (rx - 30, g2.top)], end="open"); s.text(d4.right + 8, d4.cy - 6, "[no]", 11, anchor="start")
+    m4 = s.diamond(cx, 795, 26, 26)
+    s.path([(200, g1.bottom), (200, m4.cy), (m4.left, m4.cy)], end="open")
+    s.path([(rx - 30, g2.bottom), (rx - 30, m4.cy), (m4.right, m4.cy)], end="open")
+    h = s.action(cx, 830, "Set Needs Verification if any rule applies *", W + 20); arrow(m4.bottom, h.top)
+    i = s.action(cx, 890, "Insert article into Supabase", W); arrow(h.bottom, i.top)
+    m5 = s.diamond(cx, 950, 26, 26); arrow(i.bottom, m5.top)
+    s.path([(rx, sk.bottom), (rx, m5.cy), (m5.right, m5.cy)], end="open")
+    d5 = s.diamond(cx, 1000, 150, 44, "More articles?"); arrow(m5.bottom, d5.top)
+    s.path([(d5.left, d5.cy), (30, d5.cy), (30, m3.cy), (m3.left, m3.cy)], end="open")
+    s.text(d5.left - 8, d5.cy - 6, "[yes]", 11, anchor="end")
+    j = s.action(rx, 983, "Re-group recent articles (TF-IDF)", 230)
+    s.line(d5.right, d5.cy, j.left, d5.cy, end="open"); s.text(d5.right + 6, d5.cy - 6, "[no]", 11, anchor="start")
+    s.line(j.cx, j.bottom, j.cx, 1036, end="open")
+    s.add(f"<circle cx='{j.cx}' cy='1048' r='12' fill='white' stroke='{INK}' stroke-width='1.5'/>"
+          f"<circle cx='{j.cx}' cy='1048' r='7' fill='{INK}'/>")
+    s.text(20, 1080, "* no score, score 0.40–0.60, excerpt < 150 characters, classifier confidence < 0.60, or classifier and rules differ by ≥ 0.50",
+           10.5, anchor="start", style="italic")
     s.save("activity")
 
 
-# ── 3.6 Module hierarchy ─────────────────────────────────────────────────────────────────────
 def modules():
-    s = SVG(800, 420)
-    s.rect(290, 15, 220, 40, r=6); s.text(400, 40, "AI News Aggregator", 14, weight="bold")
+    s = SVG(800, 400)
+    root = s.rect(290, 15, 220, 40, r=6); s.text(400, 40, "AI News Aggregator", 14, weight="bold")
     groups = [
         ("Collection", ["rss_fetcher.py", "scheduler.py"]),
         ("Analysis", ["dimension_service.py", "ai_service.py", "analysis_pipeline.py"]),
@@ -274,18 +337,21 @@ def modules():
         ("Frontend", ["repository.ts", "scoring.ts", "pages / components", "pdfReportGenerator.ts"]),
     ]
     w = 122
+    s.line(400, root.bottom, 400, 78)
+    s.line(12 + w / 2, 78, 12 + 5 * (w + 9) + w / 2, 78)
     for i, (g, items) in enumerate(groups):
         x = 12 + i * (w + 9)
-        s.line(400, 55, x + w / 2, 100)
+        s.line(x + w / 2, 78, x + w / 2, 100)
         s.rect(x, 100, w, 34, r=5); s.text(x + w / 2, 122, g, 13, weight="bold")
+        s.line(x + 10, 134, x + 10, 160 + (len(items) - 1) * 52 + 17)
         for j, it in enumerate(items):
             yy = 160 + j * 52
-            s.rect(x + 6, yy, w - 12, 34, r=4, fill="white"); s.text(x + w / 2, yy + 22, it, 10.5)
-            s.line(x + w / 2, (134 if j == 0 else yy - 18), x + w / 2, yy, arrow=False)
+            s.line(x + 10, yy + 17, x + 18, yy + 17)
+            s.rect(x + 18, yy, w - 20, 34, r=4, fill="white"); s.text(x + 18 + (w - 20) / 2, yy + 22, it, 10)
     s.save("modules")
 
 
 if __name__ == "__main__":
-    for f in (architecture, object_diagram, class_diagram, use_case, sequence, activity, modules):
-        f()
+    for fn in (architecture, object_diagram, class_diagram, use_case, sequence, activity, modules):
+        fn()
     print("written:", sorted(p.name for p in OUT.glob("*.svg")))

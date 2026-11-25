@@ -171,7 +171,8 @@ database tables. The diagrams reflect the implemented code.</p>
 
 <h2>3.1 Object Diagram</h2>
 <p>The object diagram shows one runtime snapshot: a BBC article processed by the pipeline, with its
-credibility result, sentiment result, dimension analysis, cross-source group and report. The values are taken
+credibility result, sentiment result and dimension analysis, and the cross-source group it shares with the
+matching Al Jazeera article. The values are taken
 from a real run of the implemented pipeline on the BBC and Al Jazeera feeds of 25 November 2026 (models not
 installed in that environment, so the status is "partial" and the classifier score is empty).</p>
 <figure><img src="diagrams/object.svg" style="width:86%"><figcaption>Fig 3.1: Object diagram of one processed article</figcaption></figure>
@@ -179,8 +180,10 @@ installed in that environment, so the status is "partial" and the classifier sco
 <h2>3.2 Class Diagram</h2>
 <p>Each <i>Article</i> belongs to one <i>Source</i> and has exactly one <i>CredibilityResult</i>, one
 <i>SentimentResult</i> and one <i>DimensionAnalysis</i>; it may have a <i>Summary</i> and may belong to an
-<i>ArticleGroup</i>. In the database these are stored as columns of the <i>articles</i> table (the eight scores
-and explanations in one JSONB column). Nullable fields mean "not measured", never zero.</p>
+<i>ArticleGroup</i> (a group has at least two articles). The analysis results are parts of the article
+(composition, filled diamond); <i>Report</i> depends on <i>Article</i> («uses»). In the database these are
+stored as columns of the <i>articles</i> table (the eight scores and explanations in one JSONB column).
+Multiplicity [0..1] means the value may be missing ("not measured"), never zero.</p>
 <figure><img src="diagrams/class.svg" style="width:86%"><figcaption>Fig 3.2: Class diagram of the core entities</figcaption></figure>
 
 <h2>3.3 Use Case Diagram</h2>
@@ -197,8 +200,10 @@ backend with ReportLab.</p>
 <figure><img src="diagrams/sequence.svg" style="width:84%"><figcaption>Fig 3.4: Sequence diagram – viewing an article and downloading its report</figcaption></figure>
 
 <h2>3.5 Activity Diagram</h2>
-<p>The activity diagram shows one scheduled ingestion run, including the decisions for failed feeds,
-duplicates, insufficient evidence and the Needs-Verification flag.</p>
+<p>The activity diagram shows one scheduled ingestion run. The first loop downloads every feed (a failed feed
+is logged and the run continues); the second loop processes every new article: duplicate check, analysis,
+risk label or "not assessed", Needs-Verification flag and storage. After the loop, recent articles are
+re-grouped.</p>
 <figure><img src="diagrams/activity.svg" style="width:62%"><figcaption>Fig 3.5: Activity diagram of the automated pipeline</figcaption></figure>
 
 <h2>3.6 Module Hierarchy Diagram</h2>
