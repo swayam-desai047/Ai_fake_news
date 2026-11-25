@@ -126,7 +126,8 @@ function normaliseRow(row: ArticleRow): Article {
         groupId: row.group_id ?? null,
         eventTitle: row.event_title ?? null,
         origin: 'database',
-        analysisMethod: 'model',
+        // Rows scored by rules only (models unavailable at ingestion) are shown with the rule-based method note.
+        analysisMethod: row.analysis_method === 'rules' ? 'heuristic' : 'model',
     };
 }
 

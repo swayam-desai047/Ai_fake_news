@@ -17,6 +17,10 @@ export async function POST(request: NextRequest) {
         }
 
         const cleanName = name.trim();
+        // Same limit as the named_visitors_name_length constraint in the database.
+        if (cleanName.length > 40) {
+            return NextResponse.json({ error: 'Name must be 40 characters or fewer' }, { status: 400 });
+        }
 
         if (!isSupabaseConfigured) {
             // Local fallback session

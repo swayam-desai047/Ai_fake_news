@@ -73,7 +73,7 @@ export default function NameAuthModal({ onAuthenticated }: NameAuthModalProps) {
                         placeholder="e.g. A. Reader"
                         autoFocus
                         autoComplete="name"
-                        maxLength={60}
+                        maxLength={40}
                         className="field"
                         disabled={loading}
                         aria-invalid={Boolean(error)}

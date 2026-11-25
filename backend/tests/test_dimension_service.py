@@ -69,3 +69,8 @@ def test_sentiment_thresholds():
     assert sentiment_from_score(60) == "positive"
     assert sentiment_from_score(59) == "neutral"
     assert sentiment_from_score(40) == "negative"
+
+
+def test_backend_feed_name_aljazeera_is_in_reference_table():
+    from services.dimension_service import publisher_reputation
+    assert publisher_reputation("AlJazeera") == publisher_reputation("Al Jazeera") == 86

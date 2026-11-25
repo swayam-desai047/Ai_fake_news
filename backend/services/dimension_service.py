@@ -35,7 +35,7 @@ RISK_LABELS = ["Low Risk", "Moderate Risk", "High Risk"]
 # Hand-curated publisher reference table (same as scoring.ts).
 PUBLISHER_REPUTATION: List[Tuple[str, int]] = [
     ("reuters", 95), ("associated press", 95), ("bbc", 93), ("guardian", 90), ("the hindu", 90),
-    ("financial times", 93), ("bloomberg", 92), ("indian express", 88), ("al jazeera", 86),
+    ("financial times", 93), ("bloomberg", 92), ("indian express", 88), ("al jazeera", 86), ("aljazeera", 86),
     ("ndtv", 84), ("mint", 86), ("techcrunch", 84), ("cnn", 86), ("yahoo", 78),
 ]
 

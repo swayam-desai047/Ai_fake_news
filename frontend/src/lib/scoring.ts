@@ -31,6 +31,7 @@ const PUBLISHER_REPUTATION: [string, number][] = [
     ['bloomberg', 92],
     ['indian express', 88],
     ['al jazeera', 86],
+    ['aljazeera', 86], // backend feed name is written without a space
     ['ndtv', 84],
     ['mint', 86],
     ['techcrunch', 84],
