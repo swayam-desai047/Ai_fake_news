@@ -6,6 +6,7 @@ const { chromium } = require(require.resolve('playwright', { paths: [path.join(_
   const dir = path.join(__dirname, 'diagrams');
   const out = path.join(__dirname, 'png');
   fs.mkdirSync(out, { recursive: true });
+  for (const f of fs.readdirSync(out).filter(n => n.endsWith('.png'))) fs.unlinkSync(path.join(out, f));
   const browser = await chromium.launch();
   for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.svg'))) {
     const svg = fs.readFileSync(path.join(dir, f), 'utf8');

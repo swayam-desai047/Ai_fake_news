@@ -166,7 +166,7 @@ def setup_document():
     style_font(pre, 18, bold=True)
     para_format(pre, before=0, after=12, line=1.15, align=WD_ALIGN_PARAGRAPH.CENTER, keep_next=True)
     ref = new_par_style("Reference")
-    para_format(ref, after=4, line=1.15, align=WD_ALIGN_PARAGRAPH.LEFT)
+    para_format(ref, after=3, line=1.0, align=WD_ALIGN_PARAGRAPH.LEFT)
     ref.paragraph_format.left_indent = Cm(1.0)
     ref.paragraph_format.first_line_indent = Cm(-1.0)
 
@@ -535,9 +535,16 @@ class Builder:
         self.doc = doc
         self.numbers = numbers  # computed page numbers (key -> page)
         self.items = []  # (kind, key, search text) in document order, for page lookup
+        self.pending_break = False  # the next block starts a new page (it follows a full-page diagram)
+
+    def take_break(self, par):
+        if self.pending_break:
+            par.paragraph_format.page_break_before = True
+            self.pending_break = False
 
     def p(self, text, style=None, align=None, size=None):
         par = self.doc.add_paragraph(style=style)
+        self.take_break(par)
         add_inline(par, text, size)
         if align is not None:
             par.alignment = align
@@ -546,6 +553,9 @@ class Builder:
     def heading(self, level, num, title):
         text = f"{num}. {title}" if level == 1 else f"{num} {title}" if num else title
         h = self.doc.add_heading(text, level=level)
+        if level == 1:
+            self.pending_break = False  # Heading 1 starts a new page anyway
+        self.take_break(h)
         for r in h.runs:
             r.font.color.rgb = RGBColor(0, 0, 0)
             r.font.name = TNR
@@ -559,10 +569,11 @@ class Builder:
 
     def caption(self, text, style="Caption"):
         c = self.doc.add_paragraph(style=style)
+        self.take_break(c)
         add_inline(c, text)
         return c
 
-    def table(self, num, caption, header, rows, widths, size=10.5, first_bold=False):
+    def table(self, num, caption, header, rows, widths, size=10.5, first_bold=False, gap=True):
         self.caption(f"Table {num}: {caption}", style="Table Caption")
         self.items.append(("tab", num, f"Table {num}:"))
         t = self.doc.add_table(rows=1, cols=len(header))
@@ -589,12 +600,14 @@ class Builder:
                     add_inline(par, f"**{line}**" if (first_bold and i == 0 and line) else line, size)
         set_col_widths(t, widths)
         cell_margins(t)
-        # small gap after a table
-        gap = self.doc.add_paragraph(style="Table Text")
-        gap.paragraph_format.space_after = Pt(6)
+        if gap:  # small gap after a table (omitted at the end of a chapter, where it could form an empty page)
+            g = self.doc.add_paragraph(style="Table Text")
+            g.paragraph_format.space_after = Pt(6)
+            g.paragraph_format.line_spacing = Pt(2)
         return t
 
-    def figure(self, num, path, caption, width=None, max_h=19.5):
+    def figure(self, num, path, caption, width=None, max_h=19.5, own_page=False):
+        """own_page: a design diagram alone on its page, at full text width, caption below, then a new page."""
         from PIL import Image
         im = Image.open(path)
         w_px, h_px = im.size
@@ -602,11 +615,17 @@ class Builder:
         if width * h_px / w_px > max_h:
             width = max_h * w_px / h_px
         par = self.doc.add_paragraph(style="Figure")
+        self.take_break(par)
+        if own_page:
+            par.paragraph_format.page_break_before = True
+            par.paragraph_format.space_before = Pt(0)
         par.add_run().add_picture(str(path), width=Cm(width))
         self.caption(f"Figure {num}: {caption}")
         self.items.append(("fig", num, f"Figure {num}:"))
+        if own_page:
+            self.pending_break = True
 
-    def code(self, num, caption, text, size=8.5, width=92):
+    def code(self, num, caption, text, size=8.5, width=92, gap=True):
         self.caption(f"Listing {num}: {caption}", style="Table Caption")
         self.items.append(("lst", num, f"Listing {num}:"))
         t = self.doc.add_table(rows=1, cols=1)
@@ -631,8 +650,10 @@ class Builder:
             r.font.size = Pt(8)
         set_col_widths(t, [CONTENT_W - 0.2])
         cell_margins(t, 60, 60, 120, 120)
-        gap = self.doc.add_paragraph(style="Table Text")
-        gap.paragraph_format.space_after = Pt(6)
+        if gap:
+            g = self.doc.add_paragraph(style="Table Text")
+            g.paragraph_format.space_after = Pt(6)
+            g.paragraph_format.line_spacing = Pt(2)
 
     def page_break(self):
         self.doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
@@ -832,6 +853,9 @@ def main():
         if new == numbers:
             break
         numbers = new
+    from pypdf import PdfReader
+    near_empty = [i + 1 for i, pg in enumerate(PdfReader(str(pdf)).pages) if len(norm(pg.extract_text() or "")) < 25]
+    print("pages with (almost) no text:", near_empty or "none")
     shutil.copy(pdf, OUT_PDF)
     import json
     (HERE / "page_numbers.json").write_text(json.dumps(numbers, indent=1))
