@@ -1,0 +1,499 @@
+
+<section class="chapter" id="ch1">
+<h1>1. Introduction</h1>
+<p>News is now read mostly online. Every day many publishers post hundreds of reports, and the same event
+appears under different headlines with different wording and detail. A reader who wants a quick, balanced
+picture has to open several websites, and it is hard to judge which reports use emotional or one-sided
+language, which headlines are not supported by the text, and which stories come from well-known newsrooms.</p>
+<p>This project, <b>AI-Powered News Aggregator with Advanced Credibility and Content Analysis</b>, is a web
+application that collects news from selected RSS feeds, removes duplicates, analyses every article with
+Natural Language Processing and shows the results on a newspaper-style dashboard. For each article it gives a
+credibility-risk indicator, a sentiment label, eight separate content-analysis scores with plain-language
+explanations, a short extractive summary (when the text is long enough), a list of other publishers that
+reported the same event, and a downloadable PDF report.</p>
+<p>The system does <b>not</b> decide whether an article is true or false. Its outputs are indicators that help
+a reader decide which reports deserve a closer look. The original publisher link is always kept.</p>
+
+<h2>1.1 Existing System, Proposed System, Need and Objective of the System</h2>
+<h3>Existing system</h3>
+<p>Before this project, news was consumed in one of three ways, each with gaps:</p>
+<ul>
+<li><b>Publisher websites and apps</b> show one source only; comparing coverage needs several sites.</li>
+<li><b>General news aggregators</b> collect headlines from many sources but give no analysis of tone,
+balance or headline accuracy.</li>
+<li><b>Fact-checking websites</b> verify claims manually; they are reliable but cover only a small number of
+viral stories and are slow for daily news.</li>
+</ul>
+<p>The first version of this project's own code also had problems that were found during the analysis phase:
+the backend stored articles without the eight dimension scores, every stored article received the label
+"Low Risk" from a database default even when no risk had been computed, the model's raw output was shown as a
+confidence value, and the database allowed anyone with the public key to insert or update articles.</p>
+
+<h3>Proposed system</h3>
+<p>The proposed system is an automated pipeline plus a web dashboard:</p>
+<ol>
+<li>A scheduler fetches RSS feeds every 30 minutes, cleans the text and removes duplicates.</li>
+<li>Each new article is analysed: eight dimensions by transparent rules, a BERT-tiny fake-news classifier and a
+DistilBERT sentiment model (when available), a combined risk score and a Needs-Verification flag.</li>
+<li>Articles about the same event from different publishers are grouped by TF-IDF text similarity.</li>
+<li>Results are stored in Supabase (PostgreSQL) and shown by a Next.js frontend with search, filters, a
+cross-source comparison page, an analytics page and PDF reports.</li>
+</ol>
+<p>When there is not enough text to judge an article, the system shows "Risk not assessed" instead of a
+made-up score.</p>
+
+<h3>Need for the system</h3>
+<ul>
+<li>To reduce the time spent visiting several sources for the same event.</li>
+<li>To remove repeated entries from the news feed.</li>
+<li>To give a quick, explained credibility-risk indication instead of a single unexplained number.</li>
+<li>To show how different publishers cover the same event.</li>
+<li>To keep the original publisher link for independent checking.</li>
+</ul>
+
+<h3>Objectives</h3>
+<ul>
+<li>Collect recent articles automatically from multiple RSS sources and remove duplicates.</li>
+<li>Classify each article with a transformer model and present its output as a raw, uncalibrated indicator.</li>
+<li>Classify sentiment as Positive, Neutral or Negative.</li>
+<li>Score eight dimensions: Sentiment, Bias, Objectivity, Readability, Propaganda/Manipulation, Headline
+Accuracy, Source Credibility and Content Quality, each with an explanation.</li>
+<li>Assign Low, Moderate or High risk, or "not assessed" when evidence is insufficient, and flag articles that
+need verification.</li>
+<li>Group related articles across publishers, and provide search, analytics and PDF reports.</li>
+<li>Test every module and document the results honestly.</li>
+</ul>
+
+<h2>1.2 Scope of Work</h2>
+<p><b>In scope:</b> English-language news from selected public RSS feeds (BBC, CNN, Al Jazeera and Yahoo);
+the text available in the feed (headline and short description); scheduled near-real-time collection
+(every 30 minutes); credibility-risk, sentiment and eight-dimension analysis; extractive summaries;
+cross-source grouping; search and filtering; analytics charts; PDF reports; and a REST API.</p>
+<p><b>Out of scope:</b> verifying the facts of a claim; reading full article bodies from publisher websites;
+languages other than English; user accounts with passwords (only a display name is stored); and training new
+machine-learning models.</p>
+
+<h2>1.3 Operating Environment – Hardware and Software</h2>
+<table>
+<caption>Table 1.1: Hardware requirements</caption>
+<tr><th>Component</th><th>Minimum</th><th>Recommended</th></tr>
+<tr><td>Processor</td><td>Dual-core 64-bit CPU</td><td>Quad-core CPU</td></tr>
+<tr><td>RAM</td><td>4 GB</td><td>8 GB (to run both models, the API and the frontend together)</td></tr>
+<tr><td>Storage</td><td>2 GB free (Python packages and model files)</td><td>5 GB</td></tr>
+<tr><td>Network</td><td colspan="2">Internet access to the RSS feeds, Supabase and (first run) Hugging Face</td></tr>
+<tr><td>Client</td><td colspan="2">Any device with a modern web browser (desktop or mobile)</td></tr>
+</table>
+<table>
+<caption>Table 1.2: Software requirements</caption>
+<tr><th>Software</th><th>Version used</th><th>Purpose</th></tr>
+<tr><td>Operating system</td><td>Windows 10/11, Linux or macOS</td><td>Development and hosting</td></tr>
+<tr><td>Python</td><td>3.10 or later</td><td>Backend, analysis pipeline, scheduler</td></tr>
+<tr><td>Node.js</td><td>20 or later</td><td>Next.js frontend</td></tr>
+<tr><td>Supabase (PostgreSQL)</td><td>Cloud project</td><td>Database with Row Level Security</td></tr>
+<tr><td>Web browser</td><td>Chrome, Edge, Firefox</td><td>User interface</td></tr>
+</table>
+
+<h2>1.4 Description of Technology Used</h2>
+<table>
+<caption>Table 1.3: Technologies and their role in the project</caption>
+<tr><th>Technology</th><th>Role in this project</th></tr>
+<tr><td>Python</td><td>RSS collection, text cleaning, analysis pipeline, database service, PDF reports.</td></tr>
+<tr><td>FastAPI + Uvicorn</td><td>REST API: articles, article by id, groups, analytics, analyse text, PDF report, health.</td></tr>
+<tr><td>Hugging Face Transformers + PyTorch</td><td>Runs <i>mrm8488/bert-tiny-finetuned-fake-news-detection</i> (classifier) and <i>distilbert-base-uncased-finetuned-sst-2-english</i> (sentiment) on CPU.</td></tr>
+<tr><td>feedparser, httpx, BeautifulSoup</td><td>Download feeds with a timeout, parse RSS entries, strip HTML.</td></tr>
+<tr><td>APScheduler</td><td>Runs the collection and analysis job every 30 minutes without overlapping runs.</td></tr>
+<tr><td>ReportLab</td><td>Builds the A4 PDF report on the server.</td></tr>
+<tr><td>Supabase / PostgreSQL</td><td>Stores articles, analysis results (JSONB dimensions) and reader names; Row Level Security.</td></tr>
+<tr><td>Next.js, React, TypeScript</td><td>Server-rendered pages: front page, sections, article, search, compare, analytics.</td></tr>
+<tr><td>Tailwind CSS</td><td>Responsive newspaper-style layout.</td></tr>
+<tr><td>Recharts</td><td>Radar chart of the eight dimensions and analytics bar/area charts.</td></tr>
+<tr><td>jsPDF</td><td>PDF report generated in the browser for any article.</td></tr>
+<tr><td>Pytest, Vitest</td><td>Automated backend and frontend tests.</td></tr>
+</table>
+<p>The overall architecture is layered so that collection, analysis, storage, API and presentation can be
+developed and tested separately (Fig 1.1).</p>
+<figure><img src="diagrams/architecture.svg" style="width:88%"><figcaption>Fig 1.1: System architecture (layers and main modules)</figcaption></figure>
+</section>
+
+<section class="chapter" id="ch2">
+<h1>2. Proposed System</h1>
+<p>The proposed system turns a stream of RSS entries into analysed, grouped and searchable articles. Its main
+idea is to give several small, explained indicators instead of one verdict, and to say clearly when the
+available text is not enough to judge.</p>
+
+<h2>2.1 Feasibility Study</h2>
+<p><b>Technical feasibility.</b> All parts use mature open-source tools. The two transformer models are small
+(BERT-tiny has about 4.4 million parameters) and run on a normal CPU. Supabase provides a hosted PostgreSQL
+database with an API, so no database server has to be maintained. The project was built and tested on a
+standard laptop-class environment.</p>
+<p><b>Economic feasibility.</b> All libraries are free. Supabase, the Hugging Face models and the RSS feeds are
+available at no cost for a project of this size. The only cost is development time.</p>
+<p><b>Operational feasibility.</b> The reader needs no training: the interface looks like a newspaper and every
+score has a short explanation. Collection runs automatically, so no manual work is needed to keep the edition
+fresh. Failure of one feed or of the models does not stop the rest of the system.</p>
+<p><b>Schedule feasibility.</b> The work was divided into twelve weekly stages (requirements, collection,
+cleaning, models, sentiment, summary, risk interpretation, grouping, eight dimensions, database and API,
+reports and analytics, testing and documentation), which fits one semester.</p>
+
+<h2>2.2 User Requirements</h2>
+<h3>Functional requirements</h3>
+<table>
+<caption>Table 2.1: Functional requirements</caption>
+<tr><th>No.</th><th>Requirement</th><th>Implemented in</th></tr>
+<tr><td>FR1</td><td>Collect articles (title, publisher, URL, category, excerpt, time) from RSS feeds every 30 minutes.</td><td>rss_fetcher.py, scheduler.py</td></tr>
+<tr><td>FR2</td><td>Clean HTML and skip duplicates by title and URL, including repeated runs.</td><td>rss_fetcher.py, db_service.py</td></tr>
+<tr><td>FR3</td><td>Score eight dimensions with an explanation each; leave a dimension unscored when it cannot be measured.</td><td>dimension_service.py, scoring.ts</td></tr>
+<tr><td>FR4</td><td>Run the fake-news classifier and sentiment model; report "unavailable" if they cannot run.</td><td>ai_service.py</td></tr>
+<tr><td>FR5</td><td>Compute a risk score and label (Low / Moderate / High or not assessed) and a Needs-Verification flag.</td><td>analysis_pipeline.py</td></tr>
+<tr><td>FR6</td><td>Group reports of the same event from at least two publishers.</td><td>clustering_service.py, clustering.ts</td></tr>
+<tr><td>FR7</td><td>Search by keywords and filter by section, publisher, risk, verification flag and date.</td><td>search page, repository.ts</td></tr>
+<tr><td>FR8</td><td>Show the article page with credibility panel, radar chart and dimension table.</td><td>article/[id]/page.tsx</td></tr>
+<tr><td>FR9</td><td>Show analytics: sections, risk labels, tone, dimension averages, publishers, timeline, coverage.</td><td>analytics/page.tsx, /api/analytics</td></tr>
+<tr><td>FR10</td><td>Download a PDF report of one article.</td><td>report_service.py, pdfReportGenerator.ts</td></tr>
+</table>
+<h3>Non-functional requirements</h3>
+<table>
+<caption>Table 2.2: Non-functional requirements</caption>
+<tr><th>Requirement</th><th>How it is met</th></tr>
+<tr><td>Usability</td><td>Newspaper layout, plain-language explanations, responsive design for mobile.</td></tr>
+<tr><td>Reliability</td><td>Feed timeouts; a failed feed, model or database call is logged and the run continues; no overlapping scheduler runs.</td></tr>
+<tr><td>Transparency</td><td>Every score has an explanation; model scores are labelled as raw outputs; missing values are shown as "n/a" or "Not reported".</td></tr>
+<tr><td>Security</td><td>Public key can only read articles; service key only on the server; CORS allow-list; input validation; rate limit on expensive endpoints; internal errors are not shown to users.</td></tr>
+<tr><td>Maintainability</td><td>Separate modules for collection, analysis, storage, API and UI; one scoring engine mirrored in Python and TypeScript and checked by shared test vectors.</td></tr>
+<tr><td>Performance</td><td>Models load once and lazily; database results are cached for one minute in the frontend.</td></tr>
+</table>
+</section>
+
+<section class="chapter" id="ch3">
+<h1>3. Analysis and Design</h1>
+<p>This chapter describes the design with UML diagrams, the module structure, the user interface and the
+database tables. The diagrams reflect the implemented code.</p>
+
+<h2>3.1 Object Diagram</h2>
+<p>The object diagram shows one runtime snapshot: a BBC article processed by the pipeline, with its
+credibility result, sentiment result, dimension analysis, cross-source group and report. The values are taken
+from a real run of the implemented pipeline on the BBC and Al Jazeera feeds of 25 November 2026 (models not
+installed in that environment, so the status is "partial" and the classifier score is empty).</p>
+<figure><img src="diagrams/object.svg" style="width:86%"><figcaption>Fig 3.1: Object diagram of one processed article</figcaption></figure>
+
+<h2>3.2 Class Diagram</h2>
+<p>Each <i>Article</i> belongs to one <i>Source</i> and has exactly one <i>CredibilityResult</i>, one
+<i>SentimentResult</i> and one <i>DimensionAnalysis</i>; it may have a <i>Summary</i> and may belong to an
+<i>ArticleGroup</i>. In the database these are stored as columns of the <i>articles</i> table (the eight scores
+and explanations in one JSONB column). Nullable fields mean "not measured", never zero.</p>
+<figure><img src="diagrams/class.svg" style="width:86%"><figcaption>Fig 3.2: Class diagram of the core entities</figcaption></figure>
+
+<h2>3.3 Use Case Diagram</h2>
+<p>There are two actors. The <b>Scheduler</b> collects, de-duplicates, analyses and groups articles. The
+<b>Reader</b> registers a display name, reads the dashboard, searches and filters, opens the article
+analysis, compares coverage, views analytics, downloads PDF reports, and (through the API) can analyse any
+text.</p>
+<figure><img src="diagrams/usecase.svg" style="width:68%"><figcaption>Fig 3.3: Use case diagram</figcaption></figure>
+
+<h2>3.4 Sequence Diagram</h2>
+<p>The sequence diagram shows a reader opening an article and downloading its PDF report. The Next.js server
+reads the article directly from Supabase with the read-only public key; the PDF is produced by the FastAPI
+backend with ReportLab.</p>
+<figure><img src="diagrams/sequence.svg" style="width:84%"><figcaption>Fig 3.4: Sequence diagram – viewing an article and downloading its report</figcaption></figure>
+
+<h2>3.5 Activity Diagram</h2>
+<p>The activity diagram shows one scheduled ingestion run, including the decisions for failed feeds,
+duplicates, insufficient evidence and the Needs-Verification flag.</p>
+<figure><img src="diagrams/activity.svg" style="width:62%"><figcaption>Fig 3.5: Activity diagram of the automated pipeline</figcaption></figure>
+
+<h2>3.6 Module Hierarchy Diagram</h2>
+<figure><img src="diagrams/modules.svg" style="width:96%"><figcaption>Fig 3.6: Module hierarchy</figcaption></figure>
+<table>
+<caption>Table 3.1: Module description</caption>
+<tr><th>Module</th><th>Responsibility</th></tr>
+<tr><td>Collection</td><td><i>rss_fetcher.py</i> downloads each feed (15 s timeout), removes HTML, converts dates to UTC ISO format and drops repeats; <i>scheduler.py</i> runs the job every 30 minutes with a lock against overlapping runs.</td></tr>
+<tr><td>Analysis</td><td><i>dimension_service.py</i> scores the eight dimensions and the rule-based risk; <i>ai_service.py</i> loads and runs the two models; <i>analysis_pipeline.py</i> combines them into risk, label, verification flag, summary and status.</td></tr>
+<tr><td>Grouping</td><td>TF-IDF + cosine similarity (threshold 0.32) on headline and lead sentence, 48-hour window, members within 36 hours of the seed, at least two publishers.</td></tr>
+<tr><td>Storage</td><td><i>db_service.py</i> skips already-stored articles before analysis, inserts rows, updates groups; SQL scripts create tables, constraints and security policies.</td></tr>
+<tr><td>API &amp; Reports</td><td><i>router.py</i> exposes the REST endpoints with validation; <i>main.py</i> adds CORS, rate limiting and error handling; <i>report_service.py</i> builds the PDF.</td></tr>
+<tr><td>Frontend</td><td><i>repository.ts</i> loads and normalises articles; <i>scoring.ts</i> scores live-feed articles with the same rules; pages and components render the UI; <i>pdfReportGenerator.ts</i> exports PDFs in the browser.</td></tr>
+</table>
+
+<h3>Risk and verification method</h3>
+<p>The rule-based risk is the inverse of a weighted average of five dimensions: Source Credibility (0.35),
+Propaganda (0.20), Objectivity (0.15), Bias (0.15) and Headline Accuracy (0.15). Only dimensions that could be
+scored are used; if they carry less than 65% of the weight, no risk score is given. When the classifier runs,
+the final risk is the mean of the rule-based risk and the classifier's fake-class score. The label is
+<b>Low Risk</b> (≤ 0.35), <b>Moderate Risk</b> (≤ 0.65) or <b>High Risk</b> (&gt; 0.65). The Needs-Verification
+flag is raised when there is no score, the score is between 0.40 and 0.60, the excerpt has fewer than 150
+characters, the classifier confidence is below 0.60, or the classifier and the rules differ by 0.50 or more.
+These values are heuristics, not calibrated probabilities.</p>
+<table>
+<caption>Table 3.2: The eight dimensions and how each is measured</caption>
+<tr><th>Dimension</th><th>Measurement (0–100)</th><th>Left unscored when</th></tr>
+<tr><td>Sentiment</td><td>DistilBERT SST-2 positive score (or positive/negative word lists); 50 = neutral</td><td>never</td></tr>
+<tr><td>Bias</td><td>Loaded / partisan words; missing attribution lowers the score</td><td>never</td></tr>
+<tr><td>Objectivity</td><td>Evaluative adjectives (e.g. "terrible", "amazing")</td><td>never</td></tr>
+<tr><td>Readability</td><td>Flesch Reading Ease of headline + excerpt</td><td>headline only</td></tr>
+<tr><td>Propaganda</td><td>Clickbait phrases, shouting capitals, stacked "!!"</td><td>never</td></tr>
+<tr><td>Headline Accuracy</td><td>Share of headline key terms found in the excerpt</td><td>no excerpt</td></tr>
+<tr><td>Source Credibility</td><td>Hand-curated reference table of newsrooms</td><td>publisher not in table</td></tr>
+<tr><td>Content Quality</td><td>Length and number of sentences of the excerpt</td><td>no excerpt</td></tr>
+</table>
+
+<h2>3.7 User Interface Design (Screens)</h2>
+<p>The interface follows a newspaper design called <i>The Daily Signal</i>: a masthead, section navigation
+(World, India, Politics, Business, Technology, Science, Culture, Sports, Coverage, Analysis) and a search link.
+Credibility is shown as a small coloured mark (green Low, amber Moderate, red High, hollow grey "not
+assessed") with a separate "Needs verification" mark. The layout is responsive.</p>
+<table>
+<caption>Table 3.3: Pages of the application</caption>
+<tr><th>Page (URL)</th><th>Purpose</th></tr>
+<tr><td>/</td><td>Front page: latest articles, lead stories, section blocks, edition statistics.</td></tr>
+<tr><td>/section/[slug]</td><td>All articles of one section.</td></tr>
+<tr><td>/article/[id]</td><td>Article excerpt, original link, credibility panel, "also reported by", analysis supplement, PDF download.</td></tr>
+<tr><td>/search</td><td>Keyword search with filters; external news search when local results are few.</td></tr>
+<tr><td>/compare</td><td>Cross-source coverage: each event with one column per publisher.</td></tr>
+<tr><td>/analytics</td><td>"News Intelligence Report" with seven charts.</td></tr>
+</table>
+<figure><img src="img/ui_home.jpg" style="width:78%"><figcaption>Fig 3.7: Front page layout (masthead, navigation, latest articles and lead stories)</figcaption></figure>
+<figure><img src="img/ui_mobile.jpg" style="width:26%"><figcaption>Fig 3.8: Responsive layout on a mobile screen (article page)</figcaption></figure>
+
+<h2>3.8 Table Specifications</h2>
+<p>The database has three tables. <i>articles</i> is written only by the backend (service-role key) and is
+readable by the public key; <i>named_visitors</i> allows public read and insert for the name-only registration;
+<i>user_profiles</i> is reserved for authenticated users and each user can access only their own row.</p>
+<table class="small">
+<caption>Table 3.4: Table <i>articles</i></caption>
+<colgroup><col style="width:27%"><col style="width:13%"><col style="width:28%"><col style="width:32%"></colgroup>
+<tr><th>Column</th><th>Type</th><th>Constraint / default</th><th>Description</th></tr>
+<tr><td>id</td><td>uuid</td><td>PK, gen_random_uuid()</td><td>Article identifier</td></tr>
+<tr><td>title</td><td>text</td><td>NOT NULL, UNIQUE</td><td>Headline (database-level duplicate check)</td></tr>
+<tr><td>source_domain</td><td>text</td><td></td><td>Publisher name</td></tr>
+<tr><td>source_url</td><td>text</td><td>indexed</td><td>Link to the original report</td></tr>
+<tr><td>content_summary</td><td>text</td><td></td><td>Excerpt supplied by the feed</td></tr>
+<tr><td>category</td><td>text</td><td>default 'general'</td><td>Feed category</td></tr>
+<tr><td>published_at</td><td>timestamptz</td><td>default now()</td><td>Publication time from the feed</td></tr>
+<tr><td>created_at</td><td>timestamptz</td><td>default now()</td><td>Ingestion time</td></tr>
+<tr><td>sentiment</td><td>text</td><td></td><td>positive / neutral / negative</td></tr>
+<tr><td>risk_score</td><td>real</td><td>CHECK 0–1 or NULL</td><td>Combined heuristic risk</td></tr>
+<tr><td>credibility_label</td><td>text</td><td>CHECK Low/Moderate/High Risk or NULL, no default</td><td>NULL = not assessed</td></tr>
+<tr><td>needs_verification</td><td>boolean</td><td>default false</td><td>Verification flag</td></tr>
+<tr><td>confidence_level</td><td>real</td><td></td><td>Classifier top-class score (uncalibrated)</td></tr>
+<tr><td>model_fake_probability</td><td>real</td><td></td><td>Classifier fake-class score (uncalibrated)</td></tr>
+<tr><td>is_fake, credibility_score</td><td>boolean, real</td><td></td><td>Legacy classifier fields (NULL when the model did not run)</td></tr>
+<tr><td>dimensions</td><td>jsonb</td><td>default '{}'</td><td>Eight scores (or null) + explanations</td></tr>
+<tr><td>ai_reasoning</td><td>text</td><td></td><td>Explanation of risk and verification</td></tr>
+<tr><td>ai_summary, summary_method</td><td>text</td><td></td><td>Extractive summary and its method</td></tr>
+<tr><td>group_id, event_title</td><td>text</td><td>indexed</td><td>Cross-source group</td></tr>
+<tr><td>analysis_status</td><td>text</td><td>CHECK complete/partial/unavailable/pending/legacy</td><td>How complete the analysis is</td></tr>
+<tr><td>analysis_method, model_version, analyzed_at</td><td>text, text, timestamptz</td><td></td><td>Provenance of the analysis</td></tr>
+</table>
+<table class="small">
+<caption>Table 3.5: Tables <i>named_visitors</i> and <i>user_profiles</i></caption>
+<colgroup><col style="width:30%"><col style="width:15%"><col style="width:27%"><col style="width:28%"></colgroup>
+<tr><th>Table.Column</th><th>Type</th><th>Constraint</th><th>Description</th></tr>
+<tr><td>named_visitors.id</td><td>uuid</td><td>PK</td><td>Visitor identifier</td></tr>
+<tr><td>named_visitors.name</td><td>text</td><td>UNIQUE, NOT NULL, 1–40 characters</td><td>Display name entered on first visit</td></tr>
+<tr><td>named_visitors.created_at</td><td>timestamptz</td><td>default now()</td><td>Registration time</td></tr>
+<tr><td>user_profiles.id, name, saved_topics</td><td>uuid, text, text[]</td><td>PK/FK → auth.users; RLS own row</td><td>Reserved for authenticated users</td></tr>
+</table>
+</section>
+
+<section class="chapter" id="ch4">
+<h1>4. Input and Output Screens</h1>
+<p>The screens below were captured from the running application on 25 November 2026. The articles are real
+items from the BBC World and Al Jazeera RSS feeds, processed by the implemented backend pipeline. In that
+environment the transformer models were not installed, so every article shows status "partial" and
+"Classifier fake score: Not available"; with the models installed these fields are filled in.</p>
+
+<h3>Input 1: Reader registration</h3>
+<p>On the first visit the reader enters a display name (1–40 characters). It is stored in the
+<i>named_visitors</i> table and in the browser.</p>
+<figure><img src="img/ui_register.jpg" style="width:62%"><figcaption>Fig 4.1: Reader registration (input)</figcaption></figure>
+
+<h3>Input 2: Search and filters</h3>
+<p>The reader types keywords and can filter by section, publisher, credibility risk (including "Not
+assessed"), order, date range and "Needs verification only" (for example, Sports + Needs verification returned
+three reports). The result shows the risk mark and verification flag of each article.</p>
+<figure><img src="img/io_search.jpg" style="width:70%"><figcaption>Fig 4.2: Search for "russia", newest first (input and output)</figcaption></figure>
+
+<h3>Output 1: Article page and credibility panel</h3>
+<p>The article page shows the stored excerpt, the original-report link and the credibility panel: risk label,
+risk score, classifier fake score, classifier confidence and verification status, with the reasoning text. "Also
+reported by" lists the Al Jazeera report grouped with this BBC report.</p>
+<figure><img src="img/out_article_top.jpg" style="width:60%"><figcaption>Fig 4.3: Article page with credibility panel (output)</figcaption></figure>
+
+<h3>Output 2: Eight-dimension analysis</h3>
+<p>The analysis supplement shows the radar chart (with the edition average as a dashed line) and the table
+of scores with the meaning of each scale and an explanation.</p>
+<figure><img src="img/out_article_analysis.jpg" style="width:86%"><figcaption>Fig 4.4: Eight-dimension radar chart and score table (output)</figcaption></figure>
+
+<h3>Output 3: Cross-source comparison</h3>
+<figure><img src="img/out_compare.jpg" style="width:58%"><figcaption>Fig 4.5: Events covered by more than one publisher (output)</figcaption></figure>
+
+<h3>Output 4: Analytics dashboard</h3>
+<p>Headline figures and charts for sections, risk labels, tone, average dimension scores, publication timeline,
+publishers and coverage width. Each dimension average uses only the articles where that dimension could be
+scored.</p>
+<figure><img src="img/out_analytics.jpg" style="width:70%"><figcaption>Fig 4.6: News Intelligence Report (analytics)</figcaption></figure>
+
+<h3>Output 5: PDF report</h3>
+<figure><img src="img/out_report.jpg" style="width:50%" class="bordered"><figcaption>Fig 4.7: Server-generated PDF report (GET /api/report/{id})</figcaption></figure>
+
+<h3>Input/Output 6: Analyse-text API</h3>
+<p><i>POST /api/analyze</i> accepts any text and returns the full analysis without storing it. The example
+below uses a deliberately sensational text; the output was produced by the implemented API (rules only, models
+not installed).</p>
+<pre class="code">{{ANALYZE_EXAMPLE}}</pre>
+<p>Table 4.1 lists all REST endpoints (each is available under <i>/api</i> and <i>/api/v1</i>).</p>
+<table class="small">
+<caption>Table 4.1: REST API endpoints</caption>
+<tr><th>Method</th><th>Path</th><th>Input</th><th>Output</th></tr>
+<tr><td>GET</td><td>/api/health</td><td>–</td><td>Status, database configured, model state, last run</td></tr>
+<tr><td>POST</td><td>/api/analyze</td><td>text (1–20,000 chars), title, publisher</td><td>Full analysis (not stored)</td></tr>
+<tr><td>GET</td><td>/api/articles</td><td>limit 1–200, offset, category, risk, q, needs_verification</td><td>Article list</td></tr>
+<tr><td>GET</td><td>/api/article/{uuid}</td><td>UUID</td><td>One article or 404</td></tr>
+<tr><td>GET</td><td>/api/groups</td><td>–</td><td>Groups with publisher-wise coverage</td></tr>
+<tr><td>GET</td><td>/api/analytics</td><td>limit</td><td>Counts and dimension averages</td></tr>
+<tr><td>GET</td><td>/api/report/{uuid}</td><td>UUID</td><td>PDF file</td></tr>
+<tr><td>POST</td><td>/api/ingest</td><td>X-Ingest-Token header</td><td>Run summary (disabled unless a token is set)</td></tr>
+</table>
+</section>
+
+<section class="chapter" id="ch5">
+<h1>5. Test Procedures and Implementation</h1>
+<h2>Implementation</h2>
+<p>The backend is a FastAPI application (<i>backend/main.py</i>) with the scheduler started at application
+start-up. The analysis engine was first written in TypeScript for live feeds; for this version it was ported
+line by line to Python so that the backend and frontend use one scoring method. A shared file of ten reference
+inputs and outputs (<i>shared/scoring_vectors.json</i>) is checked by both test suites, so the two copies cannot
+drift apart. The transformer models are loaded on first use; if they cannot be loaded, the pipeline still
+stores the rule-based analysis and marks it "partial". Database changes are delivered as idempotent SQL
+migrations that do not delete data.</p>
+<p><b>Steps to run:</b> (1) run <i>supabase_complete_setup.sql</i> in Supabase (or migrations 01 and 02 on an
+existing database); (2) in <i>backend</i>, install <i>requirements.txt</i>, set <i>SUPABASE_URL</i> and
+<i>SUPABASE_SERVICE_ROLE_KEY</i> in <i>.env</i>, run <i>python -m services.scheduler</i> once and start
+<i>uvicorn main:app</i>; (3) in <i>frontend</i>, set the public Supabase URL and anon key in <i>.env.local</i>,
+run <i>npm install</i> and <i>npm run dev</i>.</p>
+
+<h2>Test procedure</h2>
+<p>Automated unit and integration tests were written for every module. External services are replaced by
+test doubles: a fake model pipeline (so model weights are not downloaded), an in-memory database client, and
+mocked HTTP responses for RSS feeds. Tests that need the real models, real feeds or a real Supabase project are
+opt-in.</p>
+<table class="small">
+<caption>Table 5.1: Representative test cases</caption>
+<tr><th>ID</th><th>Module</th><th>Test case</th><th>Expected result</th><th>Result</th></tr>
+<tr><td>T1</td><td>Scoring</td><td>Python and TypeScript output for 10 reference inputs</td><td>Identical scores and explanations</td><td>Pass</td></tr>
+<tr><td>T2</td><td>Scoring</td><td>Headline only, unknown publisher</td><td>Headline accuracy, content quality, readability, source = null; label "Unavailable"</td><td>Pass</td></tr>
+<tr><td>T3</td><td>Risk</td><td>Scores 0.35 / 0.36 / 0.65 / 0.66</td><td>Low / Moderate / Moderate / High</td><td>Pass</td></tr>
+<tr><td>T4</td><td>Model</td><td>Classifier returns LABEL_1 = 0.9</td><td>fake score 0.9, predicted "fake"</td><td>Pass</td></tr>
+<tr><td>T5</td><td>Model</td><td>Empty text / model not installed / unexpected labels</td><td>Status "unavailable", no score invented</td><td>Pass</td></tr>
+<tr><td>T6</td><td>Pipeline</td><td>Classifier confidence 0.52; classifier and rules disagree</td><td>Needs verification = true with reason</td><td>Pass</td></tr>
+<tr><td>T7</td><td>RSS</td><td>Sample feed with HTML, date and an untitled item</td><td>Clean text, ISO date, untitled item dropped</td><td>Pass</td></tr>
+<tr><td>T8</td><td>RSS</td><td>One feed returns HTTP 500</td><td>Other feeds collected, failed feed listed</td><td>Pass</td></tr>
+<tr><td>T9</td><td>Database</td><td>Same batch stored twice; URL with tracking parameter</td><td>No duplicate rows</td><td>Pass</td></tr>
+<tr><td>T10</td><td>Database</td><td>Article without analysis label</td><td>Stored with NULL label (never "Low Risk")</td><td>Pass</td></tr>
+<tr><td>T11</td><td>Grouping</td><td>Same event from BBC and Al Jazeera; same publisher twice; 39 hours apart; accented spelling</td><td>Grouped / not grouped / not grouped / grouped</td><td>Pass</td></tr>
+<tr><td>T12</td><td>API</td><td>Empty text, 20,001 chars, invalid UUID, invalid risk value</td><td>HTTP 422</td><td>Pass</td></tr>
+<tr><td>T13</td><td>API</td><td>Database failure</td><td>HTTP 503 without internal error text</td><td>Pass</td></tr>
+<tr><td>T14</td><td>Security</td><td>CORS from unknown origin; 3 requests with limit 2; ingest without token</td><td>Blocked / 3rd gets 429 / 404</td><td>Pass</td></tr>
+<tr><td>T15</td><td>Report</td><td>PDF with full data and with an empty article</td><td>All fields present; "Not computed", no "Low Risk"</td><td>Pass</td></tr>
+<tr><td>T16</td><td>Frontend</td><td>News card and PDF for an unassessed article</td><td>"Not assessed", "n/a", no default label</td><td>Pass</td></tr>
+<tr><td>T17</td><td>Frontend</td><td>External search fallback and evidence threshold</td><td>GDELT used when Google News is empty; headline-only result not analysed</td><td>Pass</td></tr>
+</table>
+<table class="small">
+<caption>Table 5.2: Test execution summary (25 November 2026)</caption>
+<tr><th>Suite / check</th><th>Command</th><th>Result</th></tr>
+<tr><td>Backend unit + API tests</td><td>python -m pytest</td><td>62 passed, 3 skipped (opt-in)</td></tr>
+<tr><td>Frontend tests</td><td>npm run test</td><td>32 passed (5 files)</td></tr>
+<tr><td>Frontend lint / type check</td><td>npm run lint, tsc --noEmit</td><td>No errors</td></tr>
+<tr><td>Frontend production build</td><td>npm run build</td><td>Successful</td></tr>
+<tr><td>Backend start-up</td><td>uvicorn main:app</td><td>Started; /api/health and /api/analyze responded</td></tr>
+<tr><td>End-to-end run</td><td>Real BBC + Al Jazeera items → pipeline → app</td><td>41 stored, 41 duplicates skipped on re-run, 5 groups</td></tr>
+<tr><td>Real model inference</td><td>RUN_MODEL_TESTS=1</td><td>Not executed: model download blocked in the test environment</td></tr>
+<tr><td>Live RSS / Supabase</td><td>RUN_LIVE_TESTS=1</td><td>Not executed: no network access to feeds or credentials in the test environment</td></tr>
+</table>
+<p>No accuracy, precision or recall figures are reported: the classifier could not be run in the test
+environment and no labelled news dataset was evaluated. <i>scripts/validate_models.py</i> is provided to print
+the model's raw outputs on known examples once the models are installed.</p>
+</section>
+
+<section class="chapter" id="ch6">
+<h1>6. Sample Code</h1>
+<p>The following excerpts are copied from the project source code.</p>
+<h3>6.1 Rule-based risk (backend/services/dimension_service.py)</h3>
+<pre class="code">{{CODE:dimension_rule_risk}}</pre>
+<h3>6.2 Combining rules and classifier (backend/services/analysis_pipeline.py)</h3>
+<pre class="code">{{CODE:pipeline_risk}}</pre>
+<h3>6.3 Fake-news classifier with explicit label mapping (backend/services/ai_service.py)</h3>
+<pre class="code">{{CODE:ai_classify}}</pre>
+<h3>6.4 Seed-based cross-source grouping (backend/services/clustering_service.py)</h3>
+<pre class="code">{{CODE:cluster_loop}}</pre>
+<h3>6.5 Article endpoint with validation (backend/api/router.py)</h3>
+<pre class="code">{{CODE:router_article}}</pre>
+</section>
+
+<section class="chapter" id="ch7">
+<h1>7. Limitations</h1>
+<ul>
+<li><b>Short text.</b> RSS feeds give only a headline and one or two sentences. Most articles have fewer than
+150 characters, so most carry the Needs-Verification flag and Content Quality describes the excerpt, not the
+full article.</li>
+<li><b>Classifier.</b> BERT-tiny was fine-tuned on long political articles; its label mapping (LABEL_1 = fake)
+is not stated in the model configuration and is configurable. Its scores are raw softmax outputs and have not
+been calibrated or evaluated on a labelled dataset in this project.</li>
+<li><b>Word lists.</b> Lexicon rules are simple. For example, "won't" matches the positive word "won", and an
+obviously sensational text from an unknown site reached only Moderate risk (0.57) without the classifier,
+because Source Credibility could not be scored.</li>
+<li><b>Source table.</b> Source Credibility uses a small hand-made list of newsrooms; publishers outside it are
+left unscored, not judged.</li>
+<li><b>Grouping.</b> Text similarity can group different events on the same topic (two separate Gaza strike
+reports were grouped in the test run) and can miss reports worded very differently. Grouping is not claim
+verification.</li>
+<li><b>Language and sources.</b> English only; a fixed list of feeds.</li>
+<li><b>Security.</b> The rate limit is kept in memory (per server process); reader registration is name-only.</li>
+</ul>
+</section>
+
+<section class="chapter cont" id="ch8">
+<h1>8. Future Scope</h1>
+<ul>
+<li>Evaluate the classifier on a labelled news dataset and calibrate its scores (for example with temperature
+scaling), then report accuracy, precision, recall and F1.</li>
+<li>Fetch the full article text where the publisher allows it, to improve every dimension.</li>
+<li>Replace word lists with trained models for bias, objectivity and propaganda.</li>
+<li>Use sentence embeddings for event grouping to reduce topic-level false matches.</li>
+<li>Add abstractive summaries, more feeds and Indian-language news.</li>
+<li>Add user accounts with saved topics (the <i>user_profiles</i> table already exists).</li>
+</ul>
+</section>
+
+<section class="chapter cont" id="ch9">
+<h1>9. Conclusion</h1>
+<p>The project delivers a working AI-assisted news aggregator. News is collected automatically every 30
+minutes, duplicates are removed, every article receives a credibility-risk indicator, a sentiment label and
+eight explained content scores, related reports are grouped across publishers, and the results are available
+through a REST API, a responsive dashboard, an analytics page and PDF reports.</p>
+<p>The main improvement made during this phase is honesty of the output: one scoring method is shared by the
+backend and frontend, missing information is shown as missing instead of as a default value, model scores are
+labelled as uncalibrated, and the database no longer marks unanalysed articles as "Low Risk". All automated
+tests that could run in the development environment passed, and the tests that could not run are listed. The
+system is an aid for critical reading, not a fact-checking authority.</p>
+</section>
+
+<section class="chapter cont" id="ch10">
+<h1>10. References</h1>
+<ol class="refs">
+<li>Hugging Face, "Transformers documentation," https://huggingface.co/docs/transformers</li>
+<li>M. Romero, "bert-tiny-finetuned-fake-news-detection," Hugging Face model card, https://huggingface.co/mrm8488/bert-tiny-finetuned-fake-news-detection</li>
+<li>Hugging Face, "distilbert-base-uncased-finetuned-sst-2-english," model card, https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english</li>
+<li>J. Devlin, M.-W. Chang, K. Lee and K. Toutanova, "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding," NAACL-HLT, 2019.</li>
+<li>V. Sanh, L. Debut, J. Chaumond and T. Wolf, "DistilBERT, a distilled version of BERT," arXiv:1910.01108, 2019.</li>
+<li>R. Flesch, "A new readability yardstick," Journal of Applied Psychology, 32(3), 1948.</li>
+<li>FastAPI documentation, https://fastapi.tiangolo.com</li>
+<li>Supabase documentation (Row Level Security), https://supabase.com/docs</li>
+<li>Next.js documentation, https://nextjs.org/docs</li>
+<li>APScheduler documentation, https://apscheduler.readthedocs.io</li>
+<li>feedparser documentation, https://feedparser.readthedocs.io</li>
+<li>ReportLab user guide, https://docs.reportlab.com</li>
+<li>Recharts documentation, https://recharts.org</li>
+<li>Project repository: github.com/swayam-desai047/Ai_fake_news</li>
+</ol>
+</section>

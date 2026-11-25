@@ -1,0 +1,46 @@
+{
+  "request": {
+    "title": "SHOCKING: Secret cure EXPOSED that doctors don't want you to know!!",
+    "text": "You won't believe this miracle. The so-called experts are lying, obviously. Share before it is deleted!",
+    "publisher": "Viral Health Blog"
+  },
+  "response": {
+    "sentiment": "neutral",
+    "is_fake": null,
+    "credibility_score": null,
+    "risk_score": 0.57,
+    "credibility_label": "Moderate Risk",
+    "needs_verification": true,
+    "confidence_level": null,
+    "model_fake_probability": null,
+    "dimensions": {
+      "sentiment": 59,
+      "bias": 69,
+      "objectivity": 64,
+      "readability": 75,
+      "propaganda": 5,
+      "headline_accuracy": 45,
+      "source_credibility": null,
+      "content_quality": 59,
+      "explanations": {
+        "sentiment": "Balanced or descriptive tone (1 positive, 0 negative cue words).",
+        "bias": "1 loaded or partisan term detected.",
+        "objectivity": "2 evaluative adjectives found; wording leans on judgement rather than fact.",
+        "readability": "Flesch Reading Ease 75 \u2014 plain, accessible prose.",
+        "propaganda": "7 sensationalism markers (clickbait phrasing, shouting capitals or stacked exclamation).",
+        "headline_accuracy": "0 of 8 key headline terms appear in the excerpt.",
+        "source_credibility": "Not scored: Viral Health Blog is not in the reference table.",
+        "content_quality": "Feed supplied only 103 characters; quality of the full article cannot be judged."
+      }
+    },
+    "ai_reasoning": "Rule-based risk score 0.57; the fake-news classifier was unavailable. Needs verification: the score is inside the 0.40-0.60 uncertainty band; only 103 characters of publisher text were available (minimum 150).",
+    "ai_summary": null,
+    "analysis_status": "partial",
+    "analysis_method": "rules",
+    "model_version": "pipeline 2.0; rules only",
+    "model_errors": {
+      "fake_news": "ModuleNotFoundError: could not load model.",
+      "sentiment": "ModuleNotFoundError: could not load model."
+    }
+  }
+}
