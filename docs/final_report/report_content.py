@@ -272,11 +272,13 @@ def blocks():
         DIAG("arch", "architecture", "Architecture diagram: ingestion through FastAPI, reading directly from Supabase"),
 
         H2("3.4", "Class Diagram"),
-        P("{fig:class} models the core data. An Article belongs to one source and is composed of exactly one "
-          "CredibilityResult, one DimensionAnalysis and one SentimentResult, and of at most one Summary; it may belong "
-          "to one ArticleGroup, which has at least two articles. The backend is written in a functional style, so the "
-          "operations are module-level functions. Multiplicity [0..1] on an attribute means that the value may be "
-          "missing; it is never replaced by zero or a default."),
+        P("{fig:class} shows the data classes exactly as they are declared in `frontend/src/lib/types.ts`. An Article "
+          "is composed of one CredibilityAssessment and at most one DimensionScores object; an ArticleGroup aggregates "
+          "at least two articles from different publishers, and an ArticlePage aggregates the articles returned for an "
+          "ArticleQuery by `repository.queryArticles()`. AnalyticsSummary refers to the EditionInfo of the current "
+          "edition. A value typed `number | null` is missing when it could not be measured; it is never replaced by zero. "
+          "The Python backend uses no classes: it passes plain dictionaries with the same fields "
+          "(`db_service.build_record`) and its operations are module-level functions."),
         P("Physically, all article data is stored in one `articles` table, with the eight scores and explanations in a "
           "JSONB column; related reports share a `group_id` value without a foreign key ({tab:schema}). Row Level "
           "Security makes articles read-only for the public key. The `user_profiles` table is defined in the SQL but no "
@@ -300,7 +302,7 @@ def blocks():
              ["named_visitors.id, name, created_at", "uuid, text, timestamptz", "Primary key; name UNIQUE, 1–40 characters"],
              ["user_profiles.id, name, saved_topics, created_at", "uuid, text, text[], timestamptz", "id references auth.users(id); defined but unused"]],
             [6.3, 2.9, 6.7], size=9.5),
-        DIAG("class", "class", "Class diagram of the core data (operations are module-level functions)"),
+        DIAG("class", "class", "Class diagram of the data classes (TypeScript interfaces, frontend/src/lib/types.ts)"),
 
         H2("3.5", "Use-case Diagram"),
         P("In {fig:usecase} the Scheduler starts the ingestion cycle every 30 minutes; the cycle includes collection, "

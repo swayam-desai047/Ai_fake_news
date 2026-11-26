@@ -219,55 +219,67 @@ def architecture():
 # ─── 3.4 Class diagram ──────────────────────────────────────────────────────────────────────
 
 def class_diagram():
-    s = SVG(W, 700)
-    src = uml(s, 8, 20, 165, "«conceptual» Source", ["- name : String", "- feedUrl : String", "- category : String"],
-              ["fetch_articles()"])
-    art = uml(s, 236, 20, 166, "Article", ["- id : UUID", "- title : String {unique}", "- sourceUrl : String",
-                                         "- excerpt : String", "- category : String", "- publishedAt : DateTime"],
-              ["analyze_article()"])
-    grp = uml(s, 452, 20, 160, "ArticleGroup", ["- groupId : String", "- eventTitle : String", "- publishers : String[*]"],
-              ["cluster_articles()"])
-    yy = 64
-    s.line(src.right, yy, art.left, yy)
-    s.text(src.right + 5, yy - 5, "1", MIN, anchor="start"); s.text(art.left - 5, yy - 5, "0..*", MIN, anchor="end")
-    lab(s, (src.right + art.left) / 2, yy + 16, "publishes", anchor="middle")
-    s.line(art.right, yy, grp.left, yy)
-    s.text(art.right + 5, yy - 5, "2..*", MIN, anchor="start"); s.text(grp.left - 5, yy - 5, "0..1", MIN, anchor="end")
-    lab(s, (art.right + grp.left) / 2, yy + 16, "groups", anchor="middle")
-    # Report (dependency on Article)
-    rep = uml(s, 452, 150, 160, "Report", ["- articleId : UUID", "- format : A4 PDF"], ["build_article_report()"])
-    s.line(rep.left, rep.y + 50, art.right, rep.y + 50, dash=True, end="open")
-    lab(s, (rep.left + art.right) / 2, rep.y + 44, "«use»", anchor="middle")
-    # composition parts
-    y2 = 290
-    bus = 262
-    cred = uml(s, 8, y2, 206, "CredibilityResult", ["- riskScore : float [0..1]", "- label : RiskLabel [0..1]",
-                                                     "- classifierFakeScore : float [0..1]", "- classifierConfidence : float [0..1]",
-                                                     "- needsVerification : Boolean", "- status : String"])
-    dim = uml(s, 226, y2, 186, "DimensionAnalysis", ["- sentiment : int [0..1]", "- bias : int [0..1]",
-                                                      "- objectivity : int [0..1]", "- readability : int [0..1]",
-                                                      "- propaganda : int [0..1]", "- headlineAccuracy : int [0..1]",
-                                                      "- sourceCredibility : int [0..1]", "- contentQuality : int [0..1]",
-                                                      "- explanations : Map"], ["rule_risk()"])
-    sen = uml(s, 452, y2, 160, "SentimentResult", ["- label : Sentiment", "- score : int"])
-    summ = uml(s, 452, 420, 160, "Summary", ["- text : String", "- method : String"])
-    s.line(art.cx, art.bottom, art.cx, bus, start="diamond")
-    s.text(art.cx + 8, art.bottom + 20, "1", MIN, anchor="start")
-    s.line(cred.cx, bus, 432, bus)
-    for b, mult in ((cred, "1"), (dim, "1")):
-        s.line(b.cx, bus, b.cx, b.top)
-        s.text(b.cx + 6, b.top - 6, mult, MIN, anchor="start")
-    s.path([(432, bus), (sen.cx, bus), (sen.cx, sen.top)])
-    s.text(sen.cx + 6, sen.top - 6, "1", MIN, anchor="start")
-    s.path([(432, bus), (432, summ.y + 40), (summ.left, summ.y + 40)])
-    s.text(summ.left - 4, summ.y + 34, "0..1", MIN, anchor="end")
-    note(s, 8, 520, 604, [
-        "Operations are module-level Python functions (e.g. analysis_pipeline.analyze_article), not methods.",
-        "Article, its result parts, Summary (extractive) and groupId are columns of the single articles",
-        "table; the eight scores and their explanations are one JSONB column. Source is conceptual",
-        "(RSS_SOURCES dictionary and source_domain column); Report is streamed, never stored.",
-        "[0..1] marks a value that may be missing (not measured); it is never replaced by a default."])
-    s.h = 620
+    """Classes = the TypeScript interfaces in frontend/src/lib/types.ts (the backend uses plain dict rows
+    with the same fields, see db_service.build_record)."""
+    s = SVG(W, 880)
+    s.add("<defs><marker id='hdiamond' viewBox='0 0 16 10' refX='16' refY='5' markerWidth='16' markerHeight='10' "
+          f"markerUnits='userSpaceOnUse' orient='auto-start-reverse'><path d='M0,5 L8,0 L16,5 L8,10 z' fill='white' stroke='{INK}' stroke-width='1.1'/></marker></defs>")
+    A, B, CW = 8, 316, 296
+    AW = 258
+    art = uml(s, A, 8, AW, "«interface» Article", [
+        "+ id : string", "+ title : string", "+ publisher : string", "+ sourceUrl : string | null",
+        "+ imageUrl : string | null", "+ excerpt : string", "+ summary : string | null",
+        "+ summaryKind : 'ai' | 'extractive' | null", "+ section : SectionSlug", "+ author : string | null",
+        "+ publishedAt : string | null", "+ ingestedAt : string | null", "+ sentiment : Sentiment | null",
+        "+ credibility : CredibilityAssessment", "+ dimensions : DimensionScores | null",
+        "+ groupId : string | null", "+ eventTitle : string | null", "+ origin : ArticleOrigin",
+        "+ analysisMethod : AnalysisMethod"])
+    cred = uml(s, B, 8, CW, "«interface» CredibilityAssessment", [
+        "+ label : CredibilityLabel", "+ score : number | null", "+ confidence : number | null",
+        "+ needsVerification : boolean", "+ reasoning : string | null", "+ modelFakeProbability? : number | null",
+        "+ status? : string | null", "+ modelVersion? : string | null"])
+    dim = uml(s, B, 200, CW, "«interface» DimensionScores", [
+        "+ sentiment : number | null", "+ bias : number | null", "+ objectivity : number | null",
+        "+ readability : number | null", "+ propaganda : number | null", "+ headline_accuracy : number | null",
+        "+ source_credibility : number | null", "+ content_quality : number | null",
+        "+ explanations : Partial<Record<DimensionKey, string>>"])
+    # Article composed of credibility (1) and dimensions (0..1)
+    y1 = cred.y + 60
+    s.line(art.right, y1, cred.left, y1, start="diamond")
+    s.text(cred.left - 4, y1 - 5, "1", MIN, anchor="end")
+    y2 = dim.y + 60
+    s.line(art.right, y2, dim.left, y2, start="diamond")
+    s.text(dim.left - 4, y2 - 5, "0..1", MIN, anchor="end")
+    # ArticleGroup and ArticlePage aggregate Article
+    grp = uml(s, A, 420, CW, "«interface» ArticleGroup", ["+ groupId : string", "+ eventTitle : string",
+                                                        "+ articles : Article[]", "+ publishers : string[]"])
+    page = uml(s, B, 420, CW, "«interface» ArticlePage", ["+ articles : Article[]", "+ total : number",
+                                                        "+ fullMatches : number", "+ page : number",
+                                                        "+ limit : number", "+ hasMore : boolean"])
+    s.line(grp.cx - 60, grp.top, grp.cx - 60, art.bottom, start="hdiamond")
+    s.text(grp.cx - 54, art.bottom + 16, "2..*", MIN, anchor="start"); lab(s, grp.cx - 54, grp.top - 10, "articles")
+    s.path([(page.cx, page.top), (page.cx, 398), (grp.cx + 60, 398), (grp.cx + 60, art.bottom)], start="hdiamond")
+    s.text(grp.cx + 66, art.bottom + 16, "0..*", MIN, anchor="start"); lab(s, page.cx + 6, page.top - 8, "articles")
+    # query -> page dependency (repository.queryArticles)
+    q = uml(s, B, 600, CW, "«interface» ArticleQuery", ["+ q? : string", "+ section? : SectionSlug | ''",
+                                                       "+ publisher? : string", "+ risk? : CredibilityLabel | ''",
+                                                       "+ needsVerification? : boolean", "+ sort? / since? / page? / limit?"])
+    s.line(q.cx, q.top, q.cx, page.bottom, dash=True, end="open")
+    lab(s, q.cx + 6, (q.top + page.bottom) / 2 + 4, "«use» queryArticles()")
+    ed = uml(s, A, 580, CW, "«interface» EditionInfo", ["+ origin : ArticleOrigin", "+ fetchedAt : string",
+                                                      "+ articleCount : number", "+ publisherCount : number",
+                                                      "+ failedSources : string[]"])
+    an = uml(s, A, 738, CW, "«interface» AnalyticsSummary", ["+ edition : EditionInfo",
+                                                           "+ sections, risk, sentiment, publishers, timeline",
+                                                           "+ dimensionAverages : {key, average | null, n}[]",
+                                                           "+ coverage, analysisMethods"])
+    s.line(ed.cx, an.top, ed.cx, ed.bottom, end="open")
+    s.text(ed.cx + 6, ed.bottom + 14, "1", MIN, anchor="start"); lab(s, ed.cx + 6, an.top - 6, "edition")
+    lab(s, B, 800, "CredibilityLabel = 'Low Risk' | 'Moderate Risk' |")
+    lab(s, B, 814, "   'High Risk' | 'Unavailable'")
+    lab(s, B, 832, "Backend rows (Python dicts, articles table)")
+    lab(s, B, 846, "carry the same fields; see build_record().")
+    s.h = 864
     s.save("class")
 
 
