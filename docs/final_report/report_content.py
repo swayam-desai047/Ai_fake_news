@@ -311,15 +311,19 @@ def blocks():
           "when the cached edition is older than 60 seconds. The PDF is produced either by FastAPI with ReportLab (database "
           "articles, backend URL configured) or in the browser with jsPDF."),
         H2("3.7", "Activity Diagram"),
-        P("{fig:activity} shows one ingestion run (`fetch_and_store_job`). The first loop downloads every feed and logs "
+        P("{fig:activity} shows one ingestion run (`fetch_and_store_job`). A trigger is skipped while the previous run still "
+          "holds the lock. The first loop downloads every feed and logs "
           "failures without stopping. After in-batch de-duplication, the second loop skips stored articles, scores and "
-          "classifies the rest, computes the risk or marks it not assessed, sets the flag and inserts the article. "
+          "classifies the rest, computes the risk or marks it not assessed, sets the flag and inserts the article (an insert "
+          "error is logged and counted as failed). "
           "Articles of the last 48 hours are then re-grouped."),
         H2("3.8", "Component Diagram"),
         P("In {fig:component} (UML 2) the Next.js subsystem provides the pages and `/api/*` routes; `repository.ts` "
           "depends on the live-feed, external-search and scoring components. The FastAPI subsystem provides the REST API; "
           "the router uses the report service, pipeline and storage service, and the scheduler drives the RSS fetcher and "
-          "storage. Supabase provides one interface (PostgREST) required by both subsystems."),
+          "storage. Supabase provides its PostgREST interface, which each subsystem uses through its own connector: "
+          "Next.js reads with the anon key and FastAPI writes with the service-role key. The two subsystems do not call "
+          "each other except for the optional server PDF link."),
         H2("3.9", "Deployment Diagram"),
         P("{fig:deployment} shows the deployment supported by the code: the browser uses the Next.js server (Node.js 20+) "
           "and, for the optional server PDF, the backend (Python 3.10+, Uvicorn; Dockerfile image python:3.10-slim, port "

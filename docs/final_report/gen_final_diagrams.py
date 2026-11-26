@@ -204,7 +204,7 @@ def architecture():
     s.line(230, nx.bottom, 230, by, end="solid")
     lab(s, 236, 470, "SELECT\n(anon key):\n500 rows,\n60 s cache;\nINSERT\nnamed_visitors")
     s.line(345, fx.bottom, 345, by, end="solid")
-    lab(s, 351, 470, "INSERT /\nUPDATE\n(service-\nrole key)")
+    lab(s, 351, 470, "SELECT /\nINSERT /\nUPDATE\n(service-\nrole key)")
     s.line(437, fx.bottom, 437, by, end="solid")
     lab(s, 443, 470, "fetch\nfeeds")
     s.line(557, fx.bottom, 557, by, end="solid")
@@ -395,7 +395,14 @@ def activity():
 
     s.add(f"<circle cx='{cx}' cy='16' r='9' fill='{INK}'/>")
     lab(s, cx + 16, 20, "every 30 minutes")
-    m1 = s.diamond(cx, 48, 22, 22); arrow(25, m1.top)
+    dl = s.diamond(cx, 52, 190, 36, "Previous run still running?", size=MIN); arrow(25, dl.top)
+    s.line(dl.right, dl.cy, rx - 12, dl.cy, end="open"); guard(dl.right + 6, dl.cy - 5, "[yes]")
+    lab(s, rx - 12, dl.cy + 22, "skip this trigger", anchor="middle")
+    s.add(f"<circle cx='{rx}' cy='{dl.cy}' r='11' fill='white' stroke='{INK}' stroke-width='1.4'/>"
+          f"<path d='M{rx - 7.8},{dl.cy - 7.8} L{rx + 7.8},{dl.cy + 7.8} M{rx - 7.8},{dl.cy + 7.8} L{rx + 7.8},{dl.cy - 7.8}' stroke='{INK}' stroke-width='1.4'/>")
+    guard(cx + 7, dl.bottom + 12, "[no]")
+    mark = len(s.items)
+    m1 = s.diamond(cx, 48, 22, 22); arrow(dl.bottom - 50, m1.top)
     a = act(cx, 72, "Download next RSS feed (15 s timeout)"); arrow(m1.bottom, a.top)
     d1 = s.diamond(cx, 136, 140, 36, "Request failed?", size=12); arrow(a.bottom, d1.top)
     b = act(rx, d1.cy - 22, "Log failure and\nrecord feed name", 170)
@@ -424,21 +431,23 @@ def activity():
     s.path([(140, g1.bottom), (140, m4.cy), (m4.left, m4.cy)], end="open")
     s.path([(410, g2.bottom), (410, m4.cy), (m4.right, m4.cy)], end="open")
     h = act(cx, 642, "Set Needs Verification if any rule applies *", 300); arrow(m4.bottom, h.top)
-    i = act(cx, 686, "Insert article into Supabase"); arrow(h.bottom, i.top)
-    m5 = s.diamond(cx, 738, 22, 22); arrow(i.bottom, m5.top)
+    i = act(cx, 686, "Insert article into Supabase\n(error: log, count as failed)"); arrow(h.bottom, i.top)
+    m5 = s.diamond(cx, 746, 22, 22); arrow(i.bottom, m5.top)
     # skip path routed outside the "not assessed" branch, so no line crosses an action
     s.path([(sk.right, sk.cy), (606, sk.cy), (606, m5.cy), (m5.right, m5.cy)], end="open")
-    d5 = s.diamond(cx, 782, 130, 36, "More articles?", size=12); arrow(m5.bottom, d5.top)
+    d5 = s.diamond(cx, 790, 130, 36, "More articles?", size=12); arrow(m5.bottom, d5.top)
     s.path([(d5.left, d5.cy), (18, d5.cy), (18, m3.cy), (m3.left, m3.cy)], end="open")
     guard(d5.left - 6, d5.cy - 5, "[yes]", "end")
     j = act(rx, d5.cy - 22, "Re-group articles of the\nlast 48 hours (TF-IDF)", 180)
     s.line(d5.right, d5.cy, j.left, d5.cy, end="open")
     guard(d5.right + 6, d5.cy - 5, "[no]")
-    s.line(j.cx, j.bottom, j.cx, 822, end="open")
-    final_node(s, j.cx, 834)
-    s.text(8, 862, "* no score; score 0.40–0.60; excerpt < 150 characters; classifier confidence < 0.60;", MIN, anchor="start", style="italic")
-    s.text(8, 876, "  or classifier score and rule risk differ by ≥ 0.50", MIN, anchor="start", style="italic")
-    s.h = 884
+    s.line(j.cx, j.bottom, j.cx, 830, end="open")
+    final_node(s, j.cx, 842)
+    # shift everything after the lock decision down by 52 units
+    s.items[mark:] = ["<g transform='translate(0,52)'>"] + s.items[mark:] + ["</g>"]
+    s.text(8, 920, "* no score; score 0.40–0.60; excerpt < 150 characters; classifier confidence < 0.60;", MIN, anchor="start", style="italic")
+    s.text(8, 934, "  or classifier score and rule risk differ by ≥ 0.50", MIN, anchor="start", style="italic")
+    s.h = 948
     s.save("activity")
 
 
@@ -478,17 +487,22 @@ def component_diagram():
     s.text(295, 334, "«component» «database»", MIN, style="italic")
     s.text(295, 352, "Supabase PostgreSQL", 12.5, weight="bold")
     s.text(295, 369, "articles · named_visitors", MIN + 0.5)
+    # Next.js (read) and FastAPI (write) each require Supabase's PostgREST interface through their own
+    # assembly connector; no line joins the two subsystems directly.
     bx, by = 120, 349
     ball(s, bx, by)
     s.line(bx + 8, by, sb.left, by)
-    lab(s, bx + 18, by - 6, "PostgREST", size=MIN)
-    # Next.js requires it from above, FastAPI from below
-    s.line(bx, nb.bottom, bx, by - 15)
+    lab(s, bx - 14, by + 26, "PostgREST", anchor="middle", size=MIN)
+    s.line(bx, nb.bottom, bx, by - 14)
     s.add(f"<path d='M{bx - 14},{by - 4} A14,14 0 0 1 {bx + 14},{by - 4}' fill='none' stroke='{INK}' stroke-width='1.3'/>")
-    s.line(bx, by + 15, bx, 412)
-    s.add(f"<path d='M{bx - 14},{by + 4} A14,14 0 0 0 {bx + 14},{by + 4}' fill='none' stroke='{INK}' stroke-width='1.3'/>")
     lab(s, bx - 8, 306, "read (anon key)", anchor="end")
-    lab(s, bx - 8, 400, "write (service-role key)", anchor="end")
+    b2x, b2y = 295, 392
+    s.line(b2x, sb.bottom, b2x, b2y - 8)
+    ball(s, b2x, b2y)
+    s.add(f"<path d='M{b2x - 14},{b2y + 4} A14,14 0 0 0 {b2x + 14},{b2y + 4}' fill='none' stroke='{INK}' stroke-width='1.3'/>")
+    s.line(b2x, b2y + 14, b2x, 412)
+    lab(s, b2x + 20, 398, "PostgREST")
+    lab(s, b2x - 22, 405, "write (service-role key)", anchor="end")
     ext = box(s, 450, 316, 162, 66, ["External news", "live RSS · Google News", "GNews · GDELT"], MIN + 0.5, fill="white", r=0, bold_first=True)
     dep([(531, nb.bottom), (531, ext.top)])
     lab(s, 537, 304, "«use»")
